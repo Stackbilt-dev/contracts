@@ -1,0 +1,44 @@
+{
+  "name": "@stackbilt/contracts",
+  "version": "0.1.0",
+  "description": "Stackbilt Contract Ontology Layer — ODD-driven code generation from TypeScript+Zod contracts",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./generators": {
+      "types": "./dist/generators/index.d.ts",
+      "import": "./dist/generators/index.js"
+    },
+    "./introspect": {
+      "types": "./dist/introspect/index.d.ts",
+      "import": "./dist/introspect/index.js"
+    }
+  },
+  "bin": {
+    "contracts": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
+  },
+  "author": "Stackbilt LLC",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Stackbilt-dev/contracts.git"
+  }
+}
