@@ -17,6 +17,10 @@
     "./introspect": {
       "types": "./dist/introspect/index.d.ts",
       "import": "./dist/introspect/index.js"
+    },
+    "./scaffold-response": {
+      "types": "./dist/scaffold-response/index.d.ts",
+      "import": "./dist/scaffold-response/index.js"
     }
   },
   "bin": {

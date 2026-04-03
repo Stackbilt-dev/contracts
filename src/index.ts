@@ -43,3 +43,13 @@ export {
   generateTests,
   generateOpenAPI,
 } from './generators/index.js';
+
+// Contracts
+export { ScaffoldResponseContract } from './scaffold-response/index.js';
+export type {
+  ScaffoldFileType,
+  FileRoleType,
+  GovernanceDocsType,
+  PromptContextType,
+  MaterializerResultType,
+} from './scaffold-response/index.js';
