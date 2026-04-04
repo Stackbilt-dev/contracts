@@ -65,7 +65,7 @@ export const AgentPositionAnalysis = z.object({
   element: z.string(),
   orientation: Orientation,
   deckSlot: z.union([AgentDeckSlot, z.literal('domain')]),
-  properties: z.record(z.string()),
+  properties: z.record(z.string(), z.string()),
 });
 
 // ── Structured Analysis ─────────────────────────────────────────────────
@@ -133,7 +133,7 @@ export const AgentResponseContract = defineContract({
       input: z.object({
         role: AgentRole.optional(),
         intention: z.string(),
-        context: z.record(z.string()).optional(),
+        context: z.record(z.string(), z.string()).optional(),
         painSignals: z.array(z.string()).optional(),
         responseMode: ResponseMode.optional(),
         seed: z.number().optional(),

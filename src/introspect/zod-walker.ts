@@ -27,7 +27,11 @@ export interface ColumnDef {
 
 // ── Zod version-agnostic helpers ────────────────────────────────────────
 
+// Cast _def through unknown to handle both v3 ZodTypeDef and v4 $ZodTypeDef
 type AnyDef = Record<string, unknown>;
+function asDef(schema: z.ZodType): AnyDef {
+  return schema._def as unknown as AnyDef;
+}
 
 /**
  * Resolve type name from either Zod v3 (_def.typeName = "ZodString")
@@ -99,7 +103,7 @@ function unwrap(schema: z.ZodType): { inner: z.ZodType; nullable: boolean; defau
 
   // Peel off wrappers: optional, nullable, default
   for (let i = 0; i < 10; i++) {
-    const def = current._def as AnyDef;
+    const def = asDef(current);
     const typeName = getTypeName(def);
 
     if (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
@@ -124,7 +128,7 @@ function unwrap(schema: z.ZodType): { inner: z.ZodType; nullable: boolean; defau
 // ── Type mapping ────────────────────────────────────────────────────────
 
 function zodToSqlType(schema: z.ZodType): string {
-  const def = schema._def as AnyDef;
+  const def = asDef(schema);
   const typeName = getTypeName(def);
 
   switch (typeName) {
@@ -147,7 +151,7 @@ function zodToSqlType(schema: z.ZodType): string {
 }
 
 function extractEnumValuesFromSchema(schema: z.ZodType): string[] | null {
-  const def = schema._def as AnyDef;
+  const def = asDef(schema);
   if (getTypeName(def) !== 'ZodEnum') return null;
   return getEnumValues(def);
 }
@@ -167,7 +171,7 @@ function extractRef(schema: z.ZodType): { table: string; field: string } | null 
  * Walk a Zod object schema and extract column definitions for D1.
  */
 export function extractColumns(schema: z.ZodType): ColumnDef[] {
-  const def = schema._def as AnyDef;
+  const def = asDef(schema);
 
   if (getTypeName(def) !== 'ZodObject') return [];
 
@@ -205,7 +209,7 @@ export function extractColumns(schema: z.ZodType): ColumnDef[] {
  */
 export function extractEnums(schema: z.ZodType): Record<string, string[]> {
   const result: Record<string, string[]> = {};
-  const def = schema._def as AnyDef;
+  const def = asDef(schema);
 
   if (getTypeName(def) !== 'ZodObject') return result;
 
