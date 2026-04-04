@@ -34,6 +34,8 @@ export function generateSQL(
   const { dropFirst = false, ifNotExists = true } = options;
   const tableName = options.tableName ?? contract.surfaces.db?.table ?? toSnakeCase(contract.name) + 's';
   const columns = extractColumns(contract.schema);
+  const uniqueCols = new Set(contract.surfaces.db?.uniqueColumns ?? []);
+  const colOverrides = contract.surfaces.db?.columnOverrides ?? {};
   const lines: string[] = [];
 
   // Header comment
@@ -64,7 +66,15 @@ export function generateSQL(
       def += ' NOT NULL';
     }
 
-    if (col.defaultValue !== null) {
+    if (uniqueCols.has(col.name)) {
+      def += ' UNIQUE';
+    }
+
+    // SQL-expression override takes priority over Zod default
+    const override = colOverrides[col.name];
+    if (override?.default) {
+      def += ` DEFAULT ${override.default}`;
+    } else if (col.defaultValue !== null) {
       const val = formatDefault(col.defaultValue, col.sqlType);
       def += ` DEFAULT ${val}`;
     }

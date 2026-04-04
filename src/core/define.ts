@@ -53,6 +53,10 @@ export interface ApiSurface {
 export interface DbSurface {
   table: string;
   indexes?: string[];
+  /** Columns with UNIQUE constraints */
+  uniqueColumns?: string[];
+  /** Per-column SQL-expression defaults (e.g. strftime, CURRENT_TIMESTAMP) */
+  columnOverrides?: Record<string, { default?: string }>;
 }
 
 export interface ContractSurface {
