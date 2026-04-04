@@ -364,14 +364,14 @@ describe('AgentRole Enum', () => {
 });
 
 describe('AgentDeckSlot Enum', () => {
-  const validSlots = ['persona', 'domain', 'governance', 'actions'] as const;
+  const validSlots = ['persona', 'domain', 'governance', 'actions', 'memory'] as const;
 
   it.each(validSlots)('accepts "%s"', (slot) => {
     expect(AgentDeckSlot.safeParse(slot).success).toBe(true);
   });
 
-  it('has exactly 4 slots', () => {
-    expect(AgentDeckSlot.options).toHaveLength(4);
+  it('has 5 slots (4 core + memory)', () => {
+    expect(AgentDeckSlot.options).toHaveLength(5);
   });
 
   it.each(['personality', 'rules', 'tools', '', null])('rejects invalid slot: %s', (slot) => {

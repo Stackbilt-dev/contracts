@@ -2,6 +2,7 @@ export {
   AgentResponseContract,
   SchemaVersion,
   AgentRole,
+  AgentCoreSlot,
   AgentDeckSlot,
   ResponseMode,
   ConfidenceLevel,
@@ -18,6 +19,7 @@ export {
 
 export type {
   AgentRole as AgentRoleType,
+  AgentCoreSlot as AgentCoreSlotType,
   AgentDeckSlot as AgentDeckSlotType,
   AgentDeckRef as AgentDeckRefType,
   AgentManifest as AgentManifestType,

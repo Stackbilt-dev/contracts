@@ -21,7 +21,9 @@ export const SchemaVersion = z.literal(1);
 
 export const AgentRole = z.enum(['cto', 'ciso', 'cfo', 'cmo', 'cpo', 'architect']);
 
-export const AgentDeckSlot = z.enum(['persona', 'domain', 'governance', 'actions']);
+export const AgentCoreSlot = z.enum(['persona', 'domain', 'governance', 'actions']);
+
+export const AgentDeckSlot = z.enum(['persona', 'domain', 'governance', 'actions', 'memory']);
 
 export const ResponseMode = z.enum(['symbolic', 'natural', 'structured-only']);
 
@@ -53,6 +55,7 @@ export const AgentManifest = z.object({
     domain: AgentDeckRef,
     governance: AgentDeckRef,
     actions: AgentDeckRef,
+    memory: AgentDeckRef.optional(),
   }),
   tags: z.array(z.string()),
 });
@@ -159,6 +162,7 @@ export const AgentResponseContract = defineContract({
 // ── Inferred Types (for import by worker and consumers) ─────────────────
 
 export type AgentRole = z.infer<typeof AgentRole>;
+export type AgentCoreSlot = z.infer<typeof AgentCoreSlot>;
 export type AgentDeckSlot = z.infer<typeof AgentDeckSlot>;
 export type AgentDeckRef = z.infer<typeof AgentDeckRef>;
 export type AgentManifest = z.infer<typeof AgentManifest>;
