@@ -53,3 +53,19 @@ export type {
   PromptContextType,
   MaterializerResultType,
 } from './scaffold-response/index.js';
+
+export { AgentResponseContract } from './agent-response/index.js';
+export type {
+  AgentRoleType,
+  AgentDeckSlotType,
+  AgentDeckRefType,
+  AgentManifestType,
+  AgentPositionAnalysisType,
+  AgentAnalysisType,
+  AgentGuidanceType,
+  AgentReceiptType,
+  AgentRunMetadataType,
+  AgentRunResultType,
+  ResponseModeType,
+  ConfidenceLevelType,
+} from './agent-response/index.js';

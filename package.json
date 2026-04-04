@@ -21,6 +21,10 @@
     "./scaffold-response": {
       "types": "./dist/scaffold-response/index.d.ts",
       "import": "./dist/scaffold-response/index.js"
+    },
+    "./agent-response": {
+      "types": "./dist/agent-response/index.d.ts",
+      "import": "./dist/agent-response/index.js"
     }
   },
   "bin": {
