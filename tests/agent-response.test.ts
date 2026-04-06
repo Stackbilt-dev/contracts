@@ -429,7 +429,7 @@ describe('Contract Definition', () => {
   });
 
   it('has correct version', () => {
-    expect(AgentResponseContract.version).toBe('1.0.0');
+    expect(AgentResponseContract.version).toBe('2.0.0');
   });
 
   it('has a description', () => {
@@ -453,8 +453,8 @@ describe('Contract Definition', () => {
       expect(run.path).toBe('/run');
     });
 
-    it('has exactly 1 route', () => {
-      expect(Object.keys(AgentResponseContract.surfaces.api!.routes)).toHaveLength(1);
+    it('has 5 routes', () => {
+      expect(Object.keys(AgentResponseContract.surfaces.api!.routes)).toHaveLength(5);
     });
   });
 
@@ -507,8 +507,8 @@ describe('Contract Definition', () => {
       expect(result.success).toBe(false);
     });
 
-    it('has exactly 1 operation', () => {
-      expect(Object.keys(AgentResponseContract.operations)).toHaveLength(1);
+    it('has 5 operations', () => {
+      expect(Object.keys(AgentResponseContract.operations)).toHaveLength(5);
     });
   });
 
@@ -517,8 +517,8 @@ describe('Contract Definition', () => {
       expect(AgentResponseContract.authority.run).toEqual({ requires: 'authenticated' });
     });
 
-    it('has exactly 1 authority entry', () => {
-      expect(Object.keys(AgentResponseContract.authority)).toHaveLength(1);
+    it('has 5 authority entries', () => {
+      expect(Object.keys(AgentResponseContract.authority)).toHaveLength(5);
     });
   });
 });
@@ -556,7 +556,7 @@ describe('Generator Compatibility', () => {
   it('generateOpenAPI spec has correct info', () => {
     const spec = generateOpenAPI(AgentResponseContract);
     expect(spec.info.title).toContain('AgentResponse');
-    expect(spec.info.version).toBe('1.0.0');
+    expect(spec.info.version).toBe('2.0.0');
     expect(spec.info.description).toBeTruthy();
   });
 
