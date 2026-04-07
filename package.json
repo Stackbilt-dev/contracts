@@ -18,13 +18,9 @@
       "types": "./dist/introspect/index.d.ts",
       "import": "./dist/introspect/index.js"
     },
-    "./scaffold-response": {
-      "types": "./dist/scaffold-response/index.d.ts",
-      "import": "./dist/scaffold-response/index.js"
-    },
-    "./agent-response": {
-      "types": "./dist/agent-response/index.d.ts",
-      "import": "./dist/agent-response/index.js"
+    "./examples": {
+      "types": "./dist/examples/index.d.ts",
+      "import": "./dist/examples/index.js"
     }
   },
   "bin": {

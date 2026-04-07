@@ -44,36 +44,5 @@ export {
   generateOpenAPI,
 } from './generators/index.js';
 
-// Contracts
-export { ScaffoldResponseContract } from './scaffold-response/index.js';
-export type {
-  ScaffoldFileType,
-  FileRoleType,
-  GovernanceDocsType,
-  PromptContextType,
-  MaterializerResultType,
-} from './scaffold-response/index.js';
-
-export { AgentResponseContract } from './agent-response/index.js';
-export type {
-  AgentRoleType,
-  AgentDeckSlotType,
-  AgentDeckRefType,
-  AgentManifestType,
-  AgentPositionAnalysisType,
-  AgentAnalysisType,
-  AgentGuidanceType,
-  AgentReceiptType,
-  AgentRunMetadataType,
-  AgentRunResultType,
-  BootstrapMethodologyType,
-  BootstrapResultType,
-  CognitiveMetricsType,
-  MemoryZoneCountsType,
-  MemoryCardSummaryType,
-  InscribeResultType,
-  MemoryQueryResultType,
-  AgentTelemetryType,
-  ResponseModeType,
-  ConfidenceLevelType,
-} from './agent-response/index.js';
+// Product-specific contracts live in their consumer repos (private).
+// This package provides the framework — defineContract, generators, introspection.
