@@ -46,3 +46,6 @@ export {
 
 // Product-specific contracts live in their consumer repos (private).
 // This package provides the framework — defineContract, generators, introspection.
+
+export { EntitlementContract } from './contracts/entitlement.contract.js';
+export { MediaAssetContract } from './contracts/media-asset.contract.js';
