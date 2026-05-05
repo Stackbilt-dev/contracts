@@ -24,9 +24,6 @@
       "import": "./dist/examples/index.js"
     }
   },
-  "bin": {
-    "contracts": "./dist/cli.js"
-  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
