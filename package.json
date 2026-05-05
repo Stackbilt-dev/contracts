@@ -1,6 +1,7 @@
 {
   "name": "@stackbilt/contracts",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "files": ["dist", "README.md"],
   "description": "Stackbilt Contract Ontology Layer — ODD-driven code generation from TypeScript+Zod contracts",
   "type": "module",
   "main": "dist/index.js",

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineContract } from '@stackbilt/contracts';
+import { defineContract } from '../core/index.js';
 
 const AssetStatus = z.enum([
   'draft',

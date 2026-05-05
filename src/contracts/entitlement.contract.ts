@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineContract } from '@stackbilt/contracts';
+import { defineContract } from '../core/index.js';
 
 const AccessState = z.enum(['preview', 'full', 'expired', 'revoked']);
 const VerificationSource = z.enum(['offline_preview', 'provider_api', 'manual_override']);
