@@ -3,3 +3,6 @@ dist/
 *.tsbuildinfo
 .wrangler/
 .dev.vars
+.env
+.env.*
+!.env.example
