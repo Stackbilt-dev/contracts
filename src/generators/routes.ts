@@ -20,6 +20,12 @@ export interface RouteGeneratorOptions {
   appVar?: string;
   /** Whether to include auth middleware imports */
   includeAuthImports?: boolean;
+  /** Whether to include contract event helper imports when operations declare emits */
+  includeEventImports?: boolean;
+  /** Import path for emitContractEvent */
+  eventImport?: string;
+  /** Expression resolving the event sink inside a generated Hono handler */
+  eventSinkExpression?: string;
 }
 
 /**
@@ -33,6 +39,9 @@ export function generateRoutes(
     contractImport = `./${toSnakeCase(contract.name)}.contract`,
     appVar = 'app',
     includeAuthImports = true,
+    includeEventImports = true,
+    eventImport = '@stackbilt/contracts',
+    eventSinkExpression = `c.get('contractEventSink')`,
   } = options;
 
   const api = contract.surfaces.api;
@@ -51,6 +60,11 @@ export function generateRoutes(
   // Imports
   lines.push(`import { Hono } from 'hono';`);
   lines.push(`import { ${contractVar} } from '${contractImport}';`);
+
+  const hasDeclaredEvents = Object.values(contract.operations).some(op => (op.emits?.length ?? 0) > 0);
+  if (includeEventImports && hasDeclaredEvents) {
+    lines.push(`import { emitContractEvent } from '${eventImport}';`);
+  }
 
   if (includeAuthImports) {
     const authTypes = new Set<string>();
@@ -106,18 +120,18 @@ export function generateRoutes(
 
     if (isTransition && operation) {
       // State transition handler
-      emitTransitionHandler(lines, contract, routeName, operation, tableName, contractVar, method);
+      emitTransitionHandler(lines, contract, routeName, operation, tableName, contractVar, method, eventSinkExpression);
     } else if (method === 'delete' && hasId) {
-      emitDeleteHandler(lines, tableName, contract.name);
+      emitDeleteHandler(lines, operation, contract.name, routeName, tableName, eventSinkExpression);
     } else if (method === 'get' && hasId) {
-      emitGetHandler(lines, tableName, contract.name);
+      emitGetHandler(lines, contract, operation, routeName, tableName, eventSinkExpression);
     } else if (method === 'get' && !hasId) {
-      emitListHandler(lines, tableName);
+      emitListHandler(lines, contract, operation, routeName, tableName, eventSinkExpression);
     } else if (method === 'post' || method === 'put' || method === 'patch') {
       if (hasId && (method === 'put' || method === 'patch')) {
-        emitUpdateHandler(lines, operation, tableName, contractVar, routeName);
+        emitUpdateHandler(lines, operation, contract.name, routeName, tableName, contractVar, eventSinkExpression);
       } else {
-        emitCreateHandler(lines, operation, tableName, contractVar, routeName);
+        emitCreateHandler(lines, operation, contract.name, routeName, tableName, contractVar, eventSinkExpression);
       }
     } else {
       // Fallback for unrecognized patterns
@@ -142,9 +156,11 @@ export function generateRoutes(
 function emitCreateHandler(
   lines: string[],
   operation: ContractOperation | undefined,
+  contractName: string,
+  routeName: string,
   tableName: string,
   contractVar: string,
-  routeName: string,
+  eventSinkExpression: string,
 ): void {
   // Body validation
   lines.push(`    const body = await c.req.json();`);
@@ -166,42 +182,57 @@ function emitCreateHandler(
     } else {
       lines.push(`    await db.prepare(\`INSERT INTO ${tableName} (id) VALUES (?)\`).bind(id).run();`);
     }
+    emitEventCalls(lines, operation, contractName, routeName, 'id', '{ id, ...parsed.data }', eventSinkExpression);
     lines.push(`    return c.json({ data: { id, ...parsed.data } }, 201);`);
   } else {
     lines.push(`    const db = c.env.DB;`);
     lines.push(`    const id = crypto.randomUUID();`);
     lines.push(`    await db.prepare(\`INSERT INTO ${tableName} (id) VALUES (?)\`).bind(id).run();`);
+    emitEventCalls(lines, operation, contractName, routeName, 'id', '{ id, ...body }', eventSinkExpression);
     lines.push(`    return c.json({ data: { id, ...body } }, 201);`);
   }
 }
 
 function emitGetHandler(
   lines: string[],
+  contract: ContractDefinition,
+  operation: ContractOperation | undefined,
+  routeName: string,
   tableName: string,
-  contractName: string,
+  eventSinkExpression: string,
 ): void {
+  const select = buildSelectQuery(contract, tableName);
   lines.push(`    const id = c.req.param('id');`);
   lines.push(`    const db = c.env.DB;`);
-  lines.push(`    const row = await db.prepare(\`SELECT * FROM ${tableName} WHERE id = ?\`).bind(id).first();`);
-  lines.push(`    if (!row) return c.json({ error: { code: 'NOT_FOUND', message: '${contractName} not found' } }, 404);`);
+  lines.push(`    const row = await db.prepare(\`${select.getByIdSql}\`).bind(id).first();`);
+  lines.push(`    if (!row) return c.json({ error: { code: 'NOT_FOUND', message: '${contract.name} not found' } }, 404);`);
+  emitEventCalls(lines, operation, contract.name, routeName, 'id', 'row', eventSinkExpression);
   lines.push(`    return c.json({ data: row });`);
 }
 
 function emitListHandler(
   lines: string[],
+  contract: ContractDefinition,
+  operation: ContractOperation | undefined,
+  routeName: string,
   tableName: string,
+  eventSinkExpression: string,
 ): void {
+  const select = buildSelectQuery(contract, tableName);
   lines.push(`    const db = c.env.DB;`);
-  lines.push(`    const { results } = await db.prepare(\`SELECT * FROM ${tableName} LIMIT 100\`).all();`);
+  lines.push(`    const { results } = await db.prepare(\`${select.listSql}\`).all();`);
+  emitEventCalls(lines, operation, contract.name, routeName, 'undefined', 'results', eventSinkExpression);
   lines.push(`    return c.json({ data: results });`);
 }
 
 function emitUpdateHandler(
   lines: string[],
   operation: ContractOperation | undefined,
+  contractName: string,
+  routeName: string,
   tableName: string,
   contractVar: string,
-  routeName: string,
+  eventSinkExpression: string,
 ): void {
   lines.push(`    const id = c.req.param('id');`);
   lines.push(`    const body = await c.req.json();`);
@@ -220,21 +251,27 @@ function emitUpdateHandler(
     } else {
       lines.push(`    await db.prepare(\`UPDATE ${tableName} SET id = id WHERE id = ?\`).bind(id).run();`);
     }
+    emitEventCalls(lines, operation, contractName, routeName, 'id', '{ id, ...parsed.data }', eventSinkExpression);
     lines.push(`    return c.json({ data: { id, ...parsed.data } });`);
   } else {
     lines.push(`    const db = c.env.DB;`);
+    emitEventCalls(lines, operation, contractName, routeName, 'id', '{ id, ...body }', eventSinkExpression);
     lines.push(`    return c.json({ data: { id, ...body } });`);
   }
 }
 
 function emitDeleteHandler(
   lines: string[],
-  tableName: string,
+  operation: ContractOperation | undefined,
   contractName: string,
+  routeName: string,
+  tableName: string,
+  eventSinkExpression: string,
 ): void {
   lines.push(`    const id = c.req.param('id');`);
   lines.push(`    const db = c.env.DB;`);
   lines.push(`    await db.prepare(\`DELETE FROM ${tableName} WHERE id = ?\`).bind(id).run();`);
+  emitEventCalls(lines, operation, contractName, routeName, 'id', '{ id }', eventSinkExpression);
   lines.push(`    return c.json({ data: { id } });`);
 }
 
@@ -246,6 +283,7 @@ function emitTransitionHandler(
   tableName: string,
   contractVar: string,
   method: string,
+  eventSinkExpression: string,
 ): void {
   const transition = operation.transition!;
   const stateField = contract.states?.field ?? 'status';
@@ -279,7 +317,53 @@ function emitTransitionHandler(
   lines.push(`    }`);
 
   lines.push(`    await db.prepare(\`UPDATE ${tableName} SET ${stateCol} = ? WHERE id = ?\`).bind('${toState}', id).run();`);
+  emitEventCalls(lines, operation, contract.name, routeName, 'id', `{ ...row, ${stateCol}: '${toState}' }`, eventSinkExpression);
   lines.push(`    return c.json({ data: { ...row, ${stateCol}: '${toState}' } });`);
+}
+
+function emitEventCalls(
+  lines: string[],
+  operation: ContractOperation | undefined,
+  contractName: string,
+  routeName: string,
+  entityIdExpr: string,
+  payloadExpr: string,
+  eventSinkExpression: string,
+): void {
+  if (!operation?.emits?.length) return;
+
+  for (const eventName of operation.emits) {
+    lines.push(`    await emitContractEvent(${eventSinkExpression}, {`);
+    lines.push(`      contract: '${contractName}',`);
+    lines.push(`      operation: '${routeName}',`);
+    lines.push(`      event: '${eventName}',`);
+    lines.push(`      entityId: ${entityIdExpr},`);
+    lines.push(`      payload: ${payloadExpr},`);
+    lines.push(`    });`);
+  }
+}
+
+function buildSelectQuery(contract: ContractDefinition, tableName: string): { getByIdSql: string; listSql: string } {
+  const refs = extractColumns(contract.schema).filter(col => col.isRef && col.refTable && col.refField);
+  if (refs.length === 0) {
+    return {
+      getByIdSql: `SELECT * FROM ${tableName} WHERE id = ?`,
+      listSql: `SELECT * FROM ${tableName} LIMIT 100`,
+    };
+  }
+
+  const joins = refs.map(col => (
+    `LEFT JOIN ${col.refTable} ON ${tableName}.${col.name} = ${col.refTable}.${col.refField}`
+  )).join(' ');
+  const refSelects = refs.map(col => (
+    `${col.refTable}.${col.refField} AS ${col.name}_${col.refTable}_${col.refField}`
+  ));
+  const selectList = [`${tableName}.*`, ...refSelects].join(', ');
+
+  return {
+    getByIdSql: `SELECT ${selectList} FROM ${tableName} ${joins} WHERE ${tableName}.id = ?`,
+    listSql: `SELECT ${selectList} FROM ${tableName} ${joins} LIMIT 100`,
+  };
 }
 
 /** Convert snake_case to camelCase for accessing parsed data fields */

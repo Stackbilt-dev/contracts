@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { defineContract } from '../src/core/define.js';
+import { defineContract, ref } from '../src/core/define.js';
 import { generateRoutes } from '../src/generators/routes.js';
 
 // ── Test contract ─────────────────────────────────────────────────────────
@@ -28,6 +28,7 @@ const RecipeContract = defineContract({
     create: {
       input: z.object({ title: z.string(), servings: z.number().int() }),
       output: 'self',
+      emits: ['recipe.created'],
     },
     get: {
       input: z.object({}),
@@ -49,11 +50,13 @@ const RecipeContract = defineContract({
       input: z.object({}),
       output: 'self',
       transition: { from: 'draft', to: 'published' },
+      emits: ['recipe.published'],
     },
     archive: {
       input: z.object({}),
       output: 'self',
       transition: { from: ['draft', 'published'], to: 'archived' },
+      emits: ['recipe.archived'],
     },
   },
   states: {
@@ -89,6 +92,16 @@ const RecipeContract = defineContract({
     publish: { requires: 'owner', ownerField: 'user_id' },
     archive: { requires: 'role', roles: ['admin'] },
   },
+});
+
+const OrganizationContract = defineContract({
+  name: 'Organization',
+  version: '1.0.0',
+  description: 'Organization',
+  schema: z.object({ id: z.string(), name: z.string() }),
+  operations: {},
+  surfaces: { db: { table: 'organizations' } },
+  authority: {},
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -127,6 +140,16 @@ describe('generateRoutes', () => {
     it('emits input validation for create', () => {
       expect(output).toContain('RecipeContract.operations.create.input.safeParse');
     });
+
+    it('emits declared events only after insert succeeds', () => {
+      const insertIndex = output.indexOf('INSERT INTO recipes');
+      const eventIndex = output.indexOf("event: 'recipe.created'");
+      const responseIndex = output.indexOf('return c.json({ data: { id, ...parsed.data } }, 201)');
+
+      expect(output).toContain("import { emitContractEvent } from '@stackbilt/contracts'");
+      expect(eventIndex).toBeGreaterThan(insertIndex);
+      expect(responseIndex).toBeGreaterThan(eventIndex);
+    });
   });
 
   describe('GET handler', () => {
@@ -151,6 +174,44 @@ describe('generateRoutes', () => {
 
     it('returns data envelope with results', () => {
       expect(output).toContain('return c.json({ data: results })');
+    });
+  });
+
+  describe('ref query generation', () => {
+    it('emits LEFT JOIN clauses for ref fields on get/list routes', () => {
+      const refContract = defineContract({
+        name: 'OrgRecipe',
+        version: '1.0.0',
+        description: 'Recipe with organization ref',
+        schema: z.object({
+          id: z.string(),
+          organizationId: ref(OrganizationContract, 'id'),
+          title: z.string(),
+        }),
+        operations: {
+          get: { input: z.object({}), output: 'self' },
+          list: { input: z.object({}), output: 'self' },
+        },
+        surfaces: {
+          api: {
+            basePath: '/api/org-recipes',
+            routes: {
+              get: { method: 'GET', path: '/:id' },
+              list: { method: 'GET', path: '/' },
+            },
+          },
+          db: { table: 'recipes' },
+        },
+        authority: {
+          get: { requires: 'public' },
+          list: { requires: 'public' },
+        },
+      });
+
+      const result = generateRoutes(refContract);
+
+      expect(result).toContain('SELECT recipes.*, organizations.id AS organization_id_organizations_id FROM recipes LEFT JOIN organizations ON recipes.organization_id = organizations.id WHERE recipes.id = ?');
+      expect(result).toContain('SELECT recipes.*, organizations.id AS organization_id_organizations_id FROM recipes LEFT JOIN organizations ON recipes.organization_id = organizations.id LIMIT 100');
     });
   });
 
@@ -193,6 +254,13 @@ describe('generateRoutes', () => {
     it('emits UPDATE to set new state', () => {
       expect(output).toContain("UPDATE recipes SET status = ?");
       expect(output).toContain("'published'");
+    });
+
+    it('emits transition event after state update', () => {
+      const updateIndex = output.indexOf("UPDATE recipes SET status = ?");
+      const eventIndex = output.indexOf("event: 'recipe.published'");
+
+      expect(eventIndex).toBeGreaterThan(updateIndex);
     });
   });
 

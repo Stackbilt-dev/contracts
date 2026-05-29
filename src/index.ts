@@ -35,6 +35,18 @@ export {
 
 export type { ColumnDef } from './introspect/index.js';
 
+// Runtime helpers
+export {
+  ContractEventSchema,
+  emitContractEvent,
+} from './runtime/events.js';
+
+export type {
+  ContractEvent,
+  ContractEventInput,
+  ContractEventSink,
+} from './runtime/events.js';
+
 // Generators
 export {
   generateSQL,
@@ -49,6 +61,28 @@ export {
 
 export { EntitlementContract } from './contracts/entitlement.contract.js';
 export { MediaAssetContract } from './contracts/media-asset.contract.js';
+export {
+  GradedRunAggregateCountsSchema,
+  GradedRunFailureSchema,
+  GradedRunLatencySummarySchema,
+  GradedRunMetadataSchema,
+  GradedRunMetricSummarySchema,
+  GradedRunOutcomeSchema,
+  GradedRunReportSchema,
+  GradedRunScoreSchema,
+} from './contracts/graded-run.js';
+
+export type {
+  GradedRunAggregateCounts,
+  GradedRunFailure,
+  GradedRunLatencySummary,
+  GradedRunMetadata,
+  GradedRunMetricSummary,
+  GradedRunOutcome,
+  GradedRunReport,
+  GradedRunScore,
+} from './contracts/graded-run.js';
+
 export {
   BenchmarkAggregateCountsSchema,
   BenchmarkArtifactDigestSchema,

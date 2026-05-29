@@ -16,6 +16,12 @@ import { extractColumns, extractEnums, toSnakeCase } from '../introspect/zod-wal
 export interface TestGeneratorOptions {
   /** Import path for the contract definition */
   contractImport?: string;
+  /** Import path for generated routes */
+  routeImport?: string;
+  /** Exported route object name */
+  routeExportName?: string;
+  /** Emit handler-level integration tests when the contract has an API surface */
+  includeRouteIntegrationTests?: boolean;
 }
 
 /**
@@ -27,6 +33,9 @@ export function generateTests(
 ): string {
   const {
     contractImport = `./${toSnakeCase(contract.name)}.contract`,
+    routeImport = `./${toSnakeCase(contract.name)}.routes`,
+    routeExportName = `${toSnakeCase(contract.name)}Routes`,
+    includeRouteIntegrationTests = true,
   } = options;
 
   const lines: string[] = [];
@@ -38,6 +47,10 @@ export function generateTests(
   lines.push('');
   lines.push(`import { describe, it, expect } from 'vitest';`);
   lines.push(`import { ${contractVar} } from '${contractImport}';`);
+  if (includeRouteIntegrationTests && contract.surfaces.api) {
+    lines.push(`import { Hono } from 'hono';`);
+    lines.push(`import { ${routeExportName} } from '${routeImport}';`);
+  }
   lines.push('');
 
   // ── Valid fixture ──────────────────────────────────────────────────
@@ -117,12 +130,83 @@ export function generateTests(
     lines.push(`});`);
   }
 
+  if (includeRouteIntegrationTests && contract.surfaces.api) {
+    emitRouteIntegrationTests(lines, contract, routeExportName);
+  }
+
   return lines.join('\n');
 }
 
+function emitRouteIntegrationTests(
+  lines: string[],
+  contract: ContractDefinition,
+  routeExportName: string,
+): void {
+  const api = contract.surfaces.api!;
+  const tableName = contract.surfaces.db?.table ?? toSnakeCase(contract.name) + 's';
+  const routeEntry = findIntegrationRoute(contract);
+  if (!routeEntry) return;
+
+  const [routeName, routeDef] = routeEntry;
+  const method = routeDef.method.toUpperCase();
+  const path = `${api.basePath}${routeDef.path}`.replace(/:id/g, '00000000-0000-0000-0000-000000000001');
+  const hasBody = method === 'POST' || method === 'PUT' || method === 'PATCH';
+  const body = hasBody
+    ? generateSchemaFixture(contract.operations[routeName]?.input)
+    : null;
+
+  lines.push('');
+  lines.push(`describe('${contract.name} generated route handlers', () => {`);
+  lines.push(`  function createMockDb(statements: string[]) {`);
+  lines.push(`    return {`);
+  lines.push(`      prepare(sql: string) {`);
+  lines.push(`        statements.push(sql);`);
+  lines.push(`        return {`);
+  lines.push(`          bind() { return this; },`);
+  lines.push(`          async run() { return { success: true }; },`);
+  lines.push(`          async first() { return { id: '00000000-0000-0000-0000-000000000001' }; },`);
+  lines.push(`          async all() { return { results: [] }; },`);
+  lines.push(`        };`);
+  lines.push(`      },`);
+  lines.push(`    };`);
+  lines.push(`  }`);
+  lines.push('');
+  lines.push(`  it('handles ${routeName} through the generated route module', async () => {`);
+  lines.push(`    const statements: string[] = [];`);
+  lines.push(`    const app = new Hono<{ Bindings: { DB: ReturnType<typeof createMockDb> } }>();`);
+  lines.push(`    app.route('${api.basePath}', ${routeExportName});`);
+  lines.push(`    const res = await app.request('${path}', {`);
+  lines.push(`      method: '${method}',`);
+  if (hasBody) {
+    lines.push(`      headers: { 'Content-Type': 'application/json' },`);
+    lines.push(`      body: JSON.stringify(${body}),`);
+  }
+  lines.push(`    }, { DB: createMockDb(statements) });`);
+  lines.push(``);
+  lines.push(`    expect(res.status).toBeLessThan(500);`);
+  lines.push(`    expect(statements.some(sql => sql.includes('${tableName}'))).toBe(true);`);
+  lines.push(`  });`);
+  lines.push(`});`);
+}
+
+function findIntegrationRoute(contract: ContractDefinition): [string, { method: string; path: string }] | null {
+  const api = contract.surfaces.api;
+  if (!api) return null;
+
+  const preferred = Object.entries(api.routes).find(([, route]) => (
+    ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase())
+  ));
+  return preferred ?? Object.entries(api.routes)[0] ?? null;
+}
+
 function generateValidFixture(contract: ContractDefinition): string {
-  const columns = extractColumns(contract.schema);
-  const enums = extractEnums(contract.schema);
+  return generateSchemaFixture(contract.schema);
+}
+
+function generateSchemaFixture(schema: Parameters<typeof extractColumns>[0] | undefined): string {
+  if (!schema) return '{}';
+  const columns = extractColumns(schema);
+  const enums = extractEnums(schema);
   const fields: string[] = [];
 
   for (const col of columns) {
@@ -145,7 +229,7 @@ function generateValidFixture(contract: ContractDefinition): string {
     }
   }
 
-  return `{\n${fields.join(',\n')}\n  }`;
+  return fields.length > 0 ? `{\n${fields.join(',\n')}\n  }` : '{}';
 }
 
 function camelCase(snake: string): string {
