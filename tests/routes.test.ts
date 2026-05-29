@@ -104,6 +104,16 @@ const OrganizationContract = defineContract({
   authority: {},
 });
 
+const UserContract = defineContract({
+  name: 'User',
+  version: '1.0.0',
+  description: 'User',
+  schema: z.object({ id: z.string(), email: z.string() }),
+  operations: {},
+  surfaces: { db: { table: 'users' } },
+  authority: {},
+});
+
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('generateRoutes', () => {
@@ -210,8 +220,43 @@ describe('generateRoutes', () => {
 
       const result = generateRoutes(refContract);
 
-      expect(result).toContain('SELECT recipes.*, organizations.id AS organization_id_organizations_id FROM recipes LEFT JOIN organizations ON recipes.organization_id = organizations.id WHERE recipes.id = ?');
-      expect(result).toContain('SELECT recipes.*, organizations.id AS organization_id_organizations_id FROM recipes LEFT JOIN organizations ON recipes.organization_id = organizations.id LIMIT 100');
+      expect(result).toContain('SELECT recipes.*, organization_id_ref.id AS organization_id_organizations_id FROM recipes LEFT JOIN organizations AS organization_id_ref ON recipes.organization_id = organization_id_ref.id WHERE recipes.id = ?');
+      expect(result).toContain('SELECT recipes.*, organization_id_ref.id AS organization_id_organizations_id FROM recipes LEFT JOIN organizations AS organization_id_ref ON recipes.organization_id = organization_id_ref.id LIMIT 100');
+    });
+
+    it('aliases repeated refs to the same table', () => {
+      const auditContract = defineContract({
+        name: 'AuditDoc',
+        version: '1.0.0',
+        description: 'Document with two user refs',
+        schema: z.object({
+          id: z.string(),
+          createdBy: ref(UserContract, 'id'),
+          updatedBy: ref(UserContract, 'id'),
+        }),
+        operations: {
+          get: { input: z.object({}), output: 'self' },
+        },
+        surfaces: {
+          api: {
+            basePath: '/api/audit-docs',
+            routes: {
+              get: { method: 'GET', path: '/:id' },
+            },
+          },
+          db: { table: 'audit_docs' },
+        },
+        authority: {
+          get: { requires: 'public' },
+        },
+      });
+
+      const result = generateRoutes(auditContract);
+
+      expect(result).toContain('LEFT JOIN users AS created_by_ref ON audit_docs.created_by = created_by_ref.id');
+      expect(result).toContain('LEFT JOIN users AS updated_by_ref ON audit_docs.updated_by = updated_by_ref.id');
+      expect(result).toContain('created_by_ref.id AS created_by_users_id');
+      expect(result).toContain('updated_by_ref.id AS updated_by_users_id');
     });
   });
 

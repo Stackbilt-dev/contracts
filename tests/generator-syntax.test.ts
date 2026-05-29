@@ -52,6 +52,62 @@ const SyntaxContract = defineContract({
   },
 });
 
+const PublicFallbackContract = defineContract({
+  name: 'PublicFallback',
+  version: '1.0.0',
+  description: 'Contract used to verify public route selection',
+  schema: z.object({ id: z.string(), title: z.string() }),
+  operations: {
+    create: {
+      input: z.object({ title: z.string() }),
+      output: 'self',
+    },
+    list: {
+      input: z.object({}),
+      output: 'self',
+    },
+  },
+  surfaces: {
+    api: {
+      basePath: '/api/public-fallback',
+      routes: {
+        create: { method: 'POST', path: '/' },
+        list: { method: 'GET', path: '/' },
+      },
+    },
+    db: { table: 'public_fallbacks' },
+  },
+  authority: {
+    create: { requires: 'authenticated' },
+    list: { requires: 'public' },
+  },
+});
+
+const AuthOnlyContract = defineContract({
+  name: 'AuthOnly',
+  version: '1.0.0',
+  description: 'Contract used to verify auth-only route generation',
+  schema: z.object({ id: z.string(), title: z.string() }),
+  operations: {
+    create: {
+      input: z.object({ title: z.string() }),
+      output: 'self',
+    },
+  },
+  surfaces: {
+    api: {
+      basePath: '/api/auth-only',
+      routes: {
+        create: { method: 'POST', path: '/' },
+      },
+    },
+    db: { table: 'auth_only' },
+  },
+  authority: {
+    create: { requires: 'authenticated' },
+  },
+});
+
 function expectTranspiles(source: string): void {
   const result = ts.transpileModule(source, {
     compilerOptions: {
@@ -78,6 +134,22 @@ describe('generated TypeScript syntax', () => {
 
     expect(output).toContain('app.request');
     expect(output).toContain('createMockDb');
+    expectTranspiles(output);
+  });
+
+  it('prefers public routes for generated integration tests', () => {
+    const output = generateTests(PublicFallbackContract);
+
+    expect(output).toContain("it('handles list through the generated route module'");
+    expect(output).toContain("expect(statements.some(sql => sql.includes('public_fallbacks'))).toBe(true)");
+    expectTranspiles(output);
+  });
+
+  it('does not require DB statements for auth-only generated integration tests', () => {
+    const output = generateTests(AuthOnlyContract);
+
+    expect(output).toContain("it('handles create through the generated route module'");
+    expect(output).toContain('expect(statements.length).toBe(0)');
     expectTranspiles(output);
   });
 });

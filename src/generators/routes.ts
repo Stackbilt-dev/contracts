@@ -352,12 +352,14 @@ function buildSelectQuery(contract: ContractDefinition, tableName: string): { ge
     };
   }
 
-  const joins = refs.map(col => (
-    `LEFT JOIN ${col.refTable} ON ${tableName}.${col.name} = ${col.refTable}.${col.refField}`
-  )).join(' ');
-  const refSelects = refs.map(col => (
-    `${col.refTable}.${col.refField} AS ${col.name}_${col.refTable}_${col.refField}`
-  ));
+  const joins = refs.map(col => {
+    const alias = `${col.name}_ref`;
+    return `LEFT JOIN ${col.refTable} AS ${alias} ON ${tableName}.${col.name} = ${alias}.${col.refField}`;
+  }).join(' ');
+  const refSelects = refs.map(col => {
+    const alias = `${col.name}_ref`;
+    return `${alias}.${col.refField} AS ${col.name}_${col.refTable}_${col.refField}`;
+  });
   const selectList = [`${tableName}.*`, ...refSelects].join(', ');
 
   return {

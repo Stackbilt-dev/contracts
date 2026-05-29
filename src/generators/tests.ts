@@ -13,6 +13,8 @@
 import type { ContractDefinition } from '../core/define.js';
 import { extractColumns, extractEnums, toSnakeCase } from '../introspect/zod-walker.js';
 
+type RouteEntry = [string, { method: string; path: string }];
+
 export interface TestGeneratorOptions {
   /** Import path for the contract definition */
   contractImport?: string;
@@ -148,6 +150,8 @@ function emitRouteIntegrationTests(
   if (!routeEntry) return;
 
   const [routeName, routeDef] = routeEntry;
+  const auth = contract.authority[routeName];
+  const expectsDbHit = !auth || auth.requires === 'public';
   const method = routeDef.method.toUpperCase();
   const path = `${api.basePath}${routeDef.path}`.replace(/:id/g, '00000000-0000-0000-0000-000000000001');
   const hasBody = method === 'POST' || method === 'PUT' || method === 'PATCH';
@@ -184,19 +188,30 @@ function emitRouteIntegrationTests(
   lines.push(`    }, { DB: createMockDb(statements) });`);
   lines.push(``);
   lines.push(`    expect(res.status).toBeLessThan(500);`);
-  lines.push(`    expect(statements.some(sql => sql.includes('${tableName}'))).toBe(true);`);
+  if (expectsDbHit) {
+    lines.push(`    expect(statements.some(sql => sql.includes('${tableName}'))).toBe(true);`);
+  } else {
+    lines.push(`    expect(statements.length).toBe(0);`);
+  }
   lines.push(`  });`);
   lines.push(`});`);
 }
 
-function findIntegrationRoute(contract: ContractDefinition): [string, { method: string; path: string }] | null {
+function findIntegrationRoute(contract: ContractDefinition): RouteEntry | null {
   const api = contract.surfaces.api;
   if (!api) return null;
 
-  const preferred = Object.entries(api.routes).find(([, route]) => (
+  const entries = Object.entries(api.routes) as RouteEntry[];
+  const publicEntries = entries.filter(([name]) => contract.authority[name]?.requires === 'public');
+  const preferred = findMutation(publicEntries) ?? publicEntries[0] ?? findMutation(entries);
+
+  return preferred ?? entries[0] ?? null;
+}
+
+function findMutation(entries: RouteEntry[]): RouteEntry | undefined {
+  return entries.find(([, route]) => (
     ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase())
   ));
-  return preferred ?? Object.entries(api.routes)[0] ?? null;
 }
 
 function generateValidFixture(contract: ContractDefinition): string {
