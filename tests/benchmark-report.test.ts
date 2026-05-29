@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BenchmarkAggregateCountsSchema,
   BenchmarkArtifactDigestSchema,
   BenchmarkLatencySummarySchema,
   BenchmarkReportSchema,
+  GradedRunAggregateCountsSchema,
+  GradedRunLatencySummarySchema,
+  GradedRunReportSchema,
   PublicBenchmarkSummarySchema,
 } from '../src/index.js';
 
@@ -33,6 +35,38 @@ const artifact = {
 };
 
 describe('benchmark report primitives', () => {
+  it('validates a canonical graded run report shape', () => {
+    const result = GradedRunReportSchema.safeParse({
+      schemaVersion: 'graded-run-report.v1',
+      run: {
+        runId: '123e4567-e89b-12d3-a456-426614174000',
+        runName: 'classifier-eval',
+        runVersion: '1.0.0',
+        runner: 'eval-runner@1.0.0',
+        dataset: 'fixtures/classifier.jsonl',
+        startedAt: '2026-05-29T09:59:00.000Z',
+        finishedAt: '2026-05-29T10:00:00.000Z',
+        generatedAt: '2026-05-29T10:00:00.000Z',
+        environment: 'ci',
+      },
+      counts,
+      accuracy: 0.5,
+      passRate: 0.5,
+      latency: { ...latency, p90: 48 },
+      metrics: {
+        coverage: { count: 4, sum: 3, avg: 0.75, min: 0, max: 1 },
+      },
+      failures: [
+        {
+          caseId: 'case-001',
+          score: { passed: false, reason: 'answer mismatch' },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('validates a generic benchmark report', () => {
     const result = BenchmarkReportSchema.safeParse({
       schemaVersion: 'benchmark-report.v1',
@@ -76,7 +110,7 @@ describe('benchmark report primitives', () => {
   });
 
   it('rejects inconsistent aggregate counts', () => {
-    const result = BenchmarkAggregateCountsSchema.safeParse({
+    const result = GradedRunAggregateCountsSchema.safeParse({
       total: 4,
       passed: 4,
       failed: 1,
@@ -88,10 +122,23 @@ describe('benchmark report primitives', () => {
   });
 
   it('rejects unordered latency percentiles', () => {
-    const result = BenchmarkLatencySummarySchema.safeParse({
+    const result = GradedRunLatencySummarySchema.safeParse({
       ...latency,
+      p90: 65,
       p50: 70,
-      p95: 60,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('keeps benchmark latency p99 required while sharing graded-run validation', () => {
+    const result = BenchmarkLatencySummarySchema.safeParse({
+      unit: 'ms',
+      min: 8,
+      max: 80,
+      mean: 31,
+      p50: 24,
+      p95: 62,
     });
 
     expect(result.success).toBe(false);

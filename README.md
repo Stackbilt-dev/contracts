@@ -200,13 +200,18 @@ Emits Hono HTTP handler bodies with D1 operations.
 - `contractImport` — import path for the contract
 - `appVar` — Hono app variable name
 - `includeAuthImports` — include auth middleware imports
+- `includeEventImports` — include event helper imports when operations declare `emits`
+- `eventImport` — import path for `emitContractEvent`
+- `eventSinkExpression` — generated handler expression that resolves the caller-provided event sink
 
 **Output includes:**
 - Per-route handlers with try/catch error handling
 - Input validation via `safeParse()`
 - CRUD operations (INSERT, SELECT, UPDATE, DELETE)
+- `ref()`-aware `LEFT JOIN` clauses for generated get/list SELECTs
 - State transition guards (checks current state before allowing transition, returns 409 on invalid state)
 - Authority middleware (`requireAuth`, `requireOwner`, `requireRole`)
+- Optional `emitContractEvent()` calls after successful operations that declare `emits`
 - Proper HTTP status codes (201, 400, 404, 409, 500)
 - Response envelope: `{ data }` or `{ error: { code, message } }`
 
@@ -245,12 +250,15 @@ Emits Vitest test fixtures and state machine validation tests.
 
 **Options:**
 - `contractImport` — import path
+- `routeImport` — import path for generated routes
+- `routeExportName` — exported generated route object name
+- `includeRouteIntegrationTests` — include handler-level integration tests when an API surface exists
 
 **Output includes:**
 - Valid fixture generation with sensible defaults per type
 - Enum validation tests (pass/fail for each value)
 - State transition tests (allowed and blocked transitions)
-- Missing field rejection tests
+- Handler-level integration harness for generated Hono routes
 
 ## Introspection
 
@@ -270,13 +278,43 @@ toSnakeCase('createdAt'); // 'created_at'
 
 ## Benchmark Report Primitives
 
-This package includes generic benchmark/eval report schemas for private product eval suites that need shared validation without leaking product evidence.
+This package includes generic graded-run and benchmark/eval report schemas for private product eval suites that need shared validation without leaking product evidence. `GradedRunReportSchema` is the package-level canonical shape for measured case runs; benchmark reports compose the same aggregate count and latency primitives.
 
 ```typescript
 import {
+  GradedRunReportSchema,
   BenchmarkReportSchema,
   PublicBenchmarkSummarySchema,
 } from '@stackbilt/contracts';
+
+const gradedRun = GradedRunReportSchema.parse({
+  schemaVersion: 'graded-run-report.v1',
+  run: {
+    runId: '123e4567-e89b-12d3-a456-426614174000',
+    runName: 'classifier-eval',
+    runner: 'eval-runner@1.0.0',
+    dataset: 'fixtures/classifier.jsonl',
+    generatedAt: '2026-05-29T10:00:00.000Z',
+    environment: 'ci',
+  },
+  counts: {
+    total: 4,
+    passed: 3,
+    failed: 1,
+    errored: 0,
+    skipped: 0,
+  },
+  passRate: 0.75,
+  latency: {
+    unit: 'ms',
+    min: 8,
+    max: 80,
+    mean: 31,
+    p50: 24,
+    p90: 48,
+    p95: 62,
+  },
+});
 
 const report = BenchmarkReportSchema.parse({
   schemaVersion: 'benchmark-report.v1',

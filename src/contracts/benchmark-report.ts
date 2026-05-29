@@ -1,62 +1,19 @@
 import { z } from 'zod';
+import {
+  GradedRunAggregateCountsSchema,
+  GradedRunLatencySummarySchema,
+  GradedRunOutcomeSchema,
+} from './graded-run.js';
 
 const nonNegativeInteger = z.number().int().nonnegative();
-const nonNegativeFiniteNumber = z.number().finite().nonnegative();
 
-export const BenchmarkOutcomeSchema = z.enum(['pass', 'fail', 'error', 'skip']);
+export const BenchmarkOutcomeSchema = GradedRunOutcomeSchema;
 export type BenchmarkOutcome = z.infer<typeof BenchmarkOutcomeSchema>;
 
-export const BenchmarkAggregateCountsSchema = z.object({
-  total: nonNegativeInteger,
-  passed: nonNegativeInteger,
-  failed: nonNegativeInteger,
-  errored: nonNegativeInteger,
-  skipped: nonNegativeInteger,
-}).strict().superRefine((counts, ctx) => {
-  const subtotal = counts.passed + counts.failed + counts.errored + counts.skipped;
-  if (counts.total !== subtotal) {
-    ctx.addIssue({
-      code: 'custom',
-      message: 'total must equal passed + failed + errored + skipped',
-      path: ['total'],
-    });
-  }
-});
+export const BenchmarkAggregateCountsSchema = GradedRunAggregateCountsSchema;
 export type BenchmarkAggregateCounts = z.infer<typeof BenchmarkAggregateCountsSchema>;
 
-export const BenchmarkLatencySummarySchema = z.object({
-  unit: z.literal('ms'),
-  min: nonNegativeFiniteNumber,
-  max: nonNegativeFiniteNumber,
-  mean: nonNegativeFiniteNumber,
-  p50: nonNegativeFiniteNumber,
-  p95: nonNegativeFiniteNumber,
-  p99: nonNegativeFiniteNumber,
-}).strict().superRefine((latency, ctx) => {
-  if (latency.min > latency.max) {
-    ctx.addIssue({
-      code: 'custom',
-      message: 'min must be less than or equal to max',
-      path: ['min'],
-    });
-  }
-
-  if (latency.p50 > latency.p95 || latency.p95 > latency.p99) {
-    ctx.addIssue({
-      code: 'custom',
-      message: 'latency percentiles must be ordered p50 <= p95 <= p99',
-      path: ['p50'],
-    });
-  }
-
-  if (latency.p99 > latency.max) {
-    ctx.addIssue({
-      code: 'custom',
-      message: 'p99 must be less than or equal to max',
-      path: ['p99'],
-    });
-  }
-});
+export const BenchmarkLatencySummarySchema = GradedRunLatencySummarySchema.required({ p99: true });
 export type BenchmarkLatencySummary = z.infer<typeof BenchmarkLatencySummarySchema>;
 
 export const BenchmarkInferenceCallSummarySchema = z.object({
@@ -121,4 +78,3 @@ export const PublicBenchmarkSummarySchema = z.object({
   artifacts: z.array(BenchmarkArtifactDigestSchema).max(20).optional(),
 }).strict();
 export type PublicBenchmarkSummary = z.infer<typeof PublicBenchmarkSummarySchema>;
-
