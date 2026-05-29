@@ -268,6 +268,55 @@ const enums = extractEnums(MyContract.schema);
 toSnakeCase('createdAt'); // 'created_at'
 ```
 
+## Benchmark Report Primitives
+
+This package includes generic benchmark/eval report schemas for private product eval suites that need shared validation without leaking product evidence.
+
+```typescript
+import {
+  BenchmarkReportSchema,
+  PublicBenchmarkSummarySchema,
+} from '@stackbilt/contracts';
+
+const report = BenchmarkReportSchema.parse({
+  schemaVersion: 'benchmark-report.v1',
+  run: {
+    runId: '123e4567-e89b-12d3-a456-426614174000',
+    benchmarkName: 'synthetic-routing-benchmark',
+    benchmarkVersion: '1.0.0',
+    generatedAt: '2026-05-29T10:00:00.000Z',
+    environment: 'ci',
+  },
+  counts: {
+    total: 4,
+    passed: 3,
+    failed: 1,
+    errored: 0,
+    skipped: 0,
+  },
+  latency: {
+    unit: 'ms',
+    min: 8,
+    max: 80,
+    mean: 31,
+    p50: 24,
+    p95: 62,
+    p99: 77,
+  },
+});
+
+const publicSummary = PublicBenchmarkSummarySchema.parse({
+  schemaVersion: 'public-benchmark-summary.v1',
+  benchmarkName: report.run.benchmarkName,
+  benchmarkVersion: report.run.benchmarkVersion,
+  generatedAt: report.run.generatedAt,
+  counts: report.counts,
+  latency: report.latency,
+});
+```
+
+Product-specific eval evidence belongs in private repos. Do not place golden cases, scorer weights, private thresholds, endpoint configuration, raw prompts, raw outputs, competitor transcripts, or product-specific corpus rows in this package. Public summaries should contain aggregate metrics and opaque artifact digests only.
+
 ### `ColumnDef`
 
 ```typescript
