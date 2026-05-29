@@ -49,3 +49,26 @@ export {
 
 export { EntitlementContract } from './contracts/entitlement.contract.js';
 export { MediaAssetContract } from './contracts/media-asset.contract.js';
+export {
+  BenchmarkAggregateCountsSchema,
+  BenchmarkArtifactDigestSchema,
+  BenchmarkCostSummarySchema,
+  BenchmarkInferenceCallSummarySchema,
+  BenchmarkLatencySummarySchema,
+  BenchmarkOutcomeSchema,
+  BenchmarkReportSchema,
+  BenchmarkRunMetadataSchema,
+  PublicBenchmarkSummarySchema,
+} from './contracts/benchmark-report.js';
+
+export type {
+  BenchmarkAggregateCounts,
+  BenchmarkArtifactDigest,
+  BenchmarkCostSummary,
+  BenchmarkInferenceCallSummary,
+  BenchmarkLatencySummary,
+  BenchmarkOutcome,
+  BenchmarkReport,
+  BenchmarkRunMetadata,
+  PublicBenchmarkSummary,
+} from './contracts/benchmark-report.js';
