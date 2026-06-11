@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0 - 2026-06-10
+
+### Breaking Changes
+
+- **`GradedRunReportSchema`**: renamed field `failures` → `cases`. The field now accurately describes its semantics — all evaluated cases are included, with `score.passed` distinguishing outcomes. The old name implied pass-only exclusion and prevented unconditional provenance on passing runs.
+- **`GradedRunFailureSchema`** renamed to **`GradedRunCaseSchema`** (same shape, corrected name).
+- **`GradedRunFailure`** type renamed to **`GradedRunCase`**.
+- `schemaVersion` literal `'graded-run-report.v1'` is unchanged — this rename is a pre-adoption correction; no released consumers exist.
+
+### Migration
+
+```ts
+// Before
+import { GradedRunFailureSchema, GradedRunFailure } from '@stackbilt/contracts';
+const report: GradedRunReport = { ..., failures: [...] };
+
+// After
+import { GradedRunCaseSchema, GradedRunCase } from '@stackbilt/contracts';
+const report: GradedRunReport = { ..., cases: [...] };
+```
+
 ## 0.3.0 - 2026-05-29
 
 ### Added

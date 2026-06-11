@@ -63,7 +63,7 @@ export { EntitlementContract } from './contracts/entitlement.contract.js';
 export { MediaAssetContract } from './contracts/media-asset.contract.js';
 export {
   GradedRunAggregateCountsSchema,
-  GradedRunFailureSchema,
+  GradedRunCaseSchema,
   GradedRunLatencySummarySchema,
   GradedRunMetadataSchema,
   GradedRunMetricSummarySchema,
@@ -74,7 +74,7 @@ export {
 
 export type {
   GradedRunAggregateCounts,
-  GradedRunFailure,
+  GradedRunCase,
   GradedRunLatencySummary,
   GradedRunMetadata,
   GradedRunMetricSummary,

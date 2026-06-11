@@ -89,14 +89,14 @@ export const GradedRunScoreSchema = z.object({
 }).strict();
 export type GradedRunScore = z.infer<typeof GradedRunScoreSchema>;
 
-export const GradedRunFailureSchema = z.object({
+export const GradedRunCaseSchema = z.object({
   caseId: z.string().min(1),
   input: z.unknown().optional(),
   expected: z.unknown().optional(),
   actual: z.unknown().optional(),
   score: GradedRunScoreSchema.optional(),
 }).strict();
-export type GradedRunFailure = z.infer<typeof GradedRunFailureSchema>;
+export type GradedRunCase = z.infer<typeof GradedRunCaseSchema>;
 
 export const GradedRunMetadataSchema = z.object({
   runId: z.string().uuid(),
@@ -119,6 +119,6 @@ export const GradedRunReportSchema = z.object({
   passRate: z.number().min(0).max(1).optional(),
   latency: GradedRunLatencySummarySchema.optional(),
   metrics: z.record(z.string(), GradedRunMetricSummarySchema).optional(),
-  failures: z.array(GradedRunFailureSchema).optional(),
+  cases: z.array(GradedRunCaseSchema).optional(),
 }).strict();
 export type GradedRunReport = z.infer<typeof GradedRunReportSchema>;

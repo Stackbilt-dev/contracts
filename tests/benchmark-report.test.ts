@@ -56,7 +56,7 @@ describe('benchmark report primitives', () => {
       metrics: {
         coverage: { count: 4, sum: 3, avg: 0.75, min: 0, max: 1 },
       },
-      failures: [
+      cases: [
         {
           caseId: 'case-001',
           score: { passed: false, reason: 'answer mismatch' },
