@@ -84,6 +84,12 @@ export type {
 } from './contracts/graded-run.js';
 
 export {
+  buildTierSelector,
+} from './contracts/tier-selector.js';
+
+export type { TierSignalDetector, TierSelectorFn } from './contracts/tier-selector.js';
+
+export {
   PostureSchema,
   PostureSignalSchema,
   PostureGateResultSchema,

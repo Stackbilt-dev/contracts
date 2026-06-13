@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 - 2026-06-12
+
+### New Exports
+
+- **`PostureGate`** — named degradation signals → deterministic autonomy posture (NORMAL/ALT1/ALT2/DIRECT). Includes `PostureSchema`, `PostureSignalSchema`, `PostureGateResultSchema`, `evaluatePosture()`. Codifies a primitive appearing across ≥4 Stackbilt systems with no prior shared implementation.
+- **`AttestationEnvelope`** — result + provenance binding (traceId, tenantId, ticketRef, model, cost, hmac) sealed for later verification. Includes `AttestationEnvelopeSchema`, `canonicalPayload()`. Canonical shape for stackd receipts, audit-chain entries, and reading-envelope bindings.
+- **`TierSelector`** — generic interface for computing an autonomy posture from named signal detectors. Includes `buildTierSelector()` factory and `TierSignalDetector` / `TierSelectorFn` types. Reference implementation of the colonyOS cognitive-law pattern.
+
 ## 0.4.0 - 2026-06-10
 
 ### Breaking Changes
