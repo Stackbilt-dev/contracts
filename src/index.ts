@@ -84,6 +84,22 @@ export type {
 } from './contracts/graded-run.js';
 
 export {
+  PostureSchema,
+  PostureSignalSchema,
+  PostureGateResultSchema,
+  evaluatePosture,
+} from './contracts/posture-gate.js';
+
+export type { Posture, PostureSignal, PostureGateResult } from './contracts/posture-gate.js';
+
+export {
+  AttestationEnvelopeSchema,
+  canonicalPayload,
+} from './contracts/attestation-envelope.js';
+
+export type { AttestationEnvelope } from './contracts/attestation-envelope.js';
+
+export {
   BenchmarkAggregateCountsSchema,
   BenchmarkArtifactDigestSchema,
   BenchmarkCostSummarySchema,
