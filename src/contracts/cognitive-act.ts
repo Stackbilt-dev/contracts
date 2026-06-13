@@ -26,6 +26,7 @@ export const ActTypeSchema = z.enum([
   'goal_execution',
   'content_generation',
   'memory_consolidation',
+  'cc_task_completion',
 ]);
 export type ActType = z.infer<typeof ActTypeSchema>;
 

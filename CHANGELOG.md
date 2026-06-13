@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 - 2026-06-13
+
+### Changed
+
+- **`ActTypeSchema`** — adds `cc_task_completion` to the enum. Used by AEGIS daemon to seal cc_task completions and failures into the audit-chain provenance ledger.
+
 ## 0.5.1 - 2026-06-12
 
 ### New Exports
