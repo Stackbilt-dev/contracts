@@ -84,6 +84,23 @@ export type {
 } from './contracts/graded-run.js';
 
 export {
+  ActTypeSchema,
+  ActStatusSchema,
+  CognitiveActInputSchema,
+  CognitiveActRecordSchema,
+  EmittedActSchema,
+  CognitiveActContract,
+} from './contracts/cognitive-act.js';
+
+export type {
+  ActType,
+  ActStatus,
+  CognitiveActInput,
+  CognitiveActRecord,
+  EmittedAct,
+} from './contracts/cognitive-act.js';
+
+export {
   buildTierSelector,
 } from './contracts/tier-selector.js';
 

@@ -1,6 +1,6 @@
 {
   "name": "@stackbilt/contracts",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "files": ["dist", "README.md", "CHANGELOG.md"],
   "publishConfig": {
     "access": "public"

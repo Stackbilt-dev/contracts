@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 - 2026-06-12
+
+### New Exports
+
+- **`CognitiveAct`** — canonical act record for the AEGIS Total Provenance Ledger. Exports `ActTypeSchema`, `ActStatusSchema`, `CognitiveActInputSchema`, `CognitiveActRecordSchema`, `EmittedActSchema`, and the full ODD `CognitiveActContract` (use `generateSQL(CognitiveActContract)` to produce the D1 migration). Replaces inline type definitions in `aegis-daemon/provenance-bus.ts`.
+
 ## 0.5.0 - 2026-06-12
 
 ### New Exports
