@@ -123,6 +123,26 @@ export {
 export type { AttestationEnvelope } from './contracts/attestation-envelope.js';
 
 export {
+  CcTaskStatusSchema,
+  CcTaskAuthoritySchema,
+  CcTaskCategorySchema,
+  CcTaskExecutorSchema,
+  CcTaskSchema,
+  CcTaskInputSchema,
+  CcTaskContract,
+  CC_TASK_COLUMNS,
+} from './contracts/cc-task.contract.js';
+
+export type {
+  CcTaskStatus,
+  CcTaskAuthority,
+  CcTaskCategory,
+  CcTaskExecutor,
+  CcTask,
+  CcTaskInput,
+} from './contracts/cc-task.contract.js';
+
+export {
   BenchmarkAggregateCountsSchema,
   BenchmarkArtifactDigestSchema,
   BenchmarkCostSummarySchema,
