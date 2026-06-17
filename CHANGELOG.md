@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 - 2026-06-17
+
+### New Exports
+
+- **`generateMigration(contract, { existingColumns })`** — ALTER TABLE diff mode. Diffs the contract schema against existing production column names and emits `ALTER TABLE ... ADD COLUMN ...` statements for new columns. Notes removed columns (D1 cannot DROP COLUMN) as comments. Returns a no-op comment when schema is already up to date. Unblocks all contracts from being used to evolve existing production tables. Closes contracts#18.
+- **`UserContract`** — first-party user ownership primitive. Required by any contract using `ref(UserContract, 'id')` for ownership FK references. Exports `UserContract`, `UserStatus`, `UserTier`, `User`, `UserInput`. Closes contracts#19.
+- **`generateApiTypes(contract)`** — emits a TypeScript type definition file with camelCase entity interface, per-operation input/output types, and route path constants. Closes contracts#20.
+- **`toCamelCase(str)`** — inverse of `toSnakeCase`. Exported from both `@stackbilt/contracts` (main) and `@stackbilt/contracts/introspect`.
+
+### Changed
+
+- `@stackbilt/contracts/generators` now exports `generateMigration` and `generateApiTypes` alongside existing generators.
+- `@stackbilt/contracts/introspect` now exports `toCamelCase` alongside `toSnakeCase`.
+
 ## 0.5.2 - 2026-06-13
 
 ### Changed

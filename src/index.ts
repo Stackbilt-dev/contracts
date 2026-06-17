@@ -31,6 +31,7 @@ export {
   extractColumns,
   extractEnums,
   toSnakeCase,
+  toCamelCase,
 } from './introspect/index.js';
 
 export type { ColumnDef } from './introspect/index.js';
@@ -50,14 +51,19 @@ export type {
 // Generators
 export {
   generateSQL,
+  generateMigration,
   generateRoutes,
   generateSDK,
   generateTests,
   generateOpenAPI,
+  generateApiTypes,
 } from './generators/index.js';
 
 // Product-specific contracts live in their consumer repos (private).
 // This package provides the framework — defineContract, generators, introspection.
+
+export { UserContract, UserStatus, UserTier } from './contracts/user.contract.js';
+export type { User, UserInput } from './contracts/user.contract.js';
 
 export { EntitlementContract } from './contracts/entitlement.contract.js';
 export { MediaAssetContract } from './contracts/media-asset.contract.js';

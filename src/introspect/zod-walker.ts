@@ -235,3 +235,12 @@ export function toSnakeCase(str: string): string {
     .replace(/([A-Z])([A-Z][a-z])/g, '$1_$2')
     .toLowerCase();
 }
+
+/**
+ * Convert snake_case to camelCase. Inverse of toSnakeCase.
+ * Used by generateApiTypes to produce API-surface field names from
+ * contracts that define DB-aligned snake_case field names.
+ */
+export function toCamelCase(str: string): string {
+  return str.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+}

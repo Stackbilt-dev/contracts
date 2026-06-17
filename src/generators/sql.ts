@@ -24,6 +24,97 @@ export interface SQLGeneratorOptions {
   tableName?: string;
 }
 
+export interface MigrationGeneratorOptions {
+  /**
+   * Column names currently in the production table (from PRAGMA table_info
+   * or your migration ledger). New columns in the contract not in this list
+   * will be emitted as ALTER TABLE ADD COLUMN statements.
+   */
+  existingColumns: string[];
+  /** Table name override */
+  tableName?: string;
+}
+
+/**
+ * Generate ALTER TABLE migration SQL for an existing production table.
+ *
+ * Diffs the contract schema against existingColumns and emits:
+ * - ALTER TABLE ... ADD COLUMN ... for new columns
+ * - Comments for columns present in prod but absent from the contract
+ *   (D1 cannot DROP COLUMN; operator must decide manually)
+ *
+ * Returns an empty migration (comment only) if no new columns are found.
+ */
+export function generateMigration(
+  contract: ContractDefinition,
+  options: MigrationGeneratorOptions,
+): string {
+  const tableName = options.tableName ?? contract.surfaces.db?.table ?? toSnakeCase(contract.name) + 's';
+  const columns = extractColumns(contract.schema);
+  const colOverrides = contract.surfaces.db?.columnOverrides ?? {};
+  const existingSet = new Set(options.existingColumns.map(c => c.toLowerCase()));
+
+  const newCols = columns.filter(c => !existingSet.has(c.name.toLowerCase()));
+  const contractColSet = new Set(columns.map(c => c.name.toLowerCase()));
+  const removedCols = options.existingColumns.filter(c => !contractColSet.has(c.toLowerCase()));
+
+  const lines: string[] = [];
+  lines.push(`-- ALTER TABLE migration for ${tableName}`);
+  lines.push(`-- Generated from ${contract.name} contract v${contract.version}`);
+  lines.push('');
+
+  if (newCols.length === 0) {
+    lines.push('-- No new columns detected. Schema is up to date.');
+    if (removedCols.length > 0) {
+      lines.push('');
+      lines.push('-- Columns in prod not in contract (manual review required):');
+      for (const col of removedCols) {
+        lines.push(`--   ${col} (D1 cannot DROP COLUMN)`);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  lines.push('-- New columns to add:');
+  for (const col of newCols) {
+    let stmt = `ALTER TABLE ${tableName} ADD COLUMN ${col.name} ${col.sqlType}`;
+
+    if (!col.nullable && !col.isPrimaryKey) {
+      // D1 requires NOT NULL ADD COLUMN to have a DEFAULT
+      const override = colOverrides[col.name];
+      const hasDefault = override?.default || col.defaultValue !== null;
+      if (hasDefault) {
+        stmt += ' NOT NULL';
+      }
+      // If no default, omit NOT NULL — ADD COLUMN without DEFAULT cannot be NOT NULL in SQLite
+    }
+
+    const override = colOverrides[col.name];
+    if (override?.default) {
+      stmt += ` DEFAULT ${override.default}`;
+    } else if (col.defaultValue !== null) {
+      stmt += ` DEFAULT ${formatDefault(col.defaultValue, col.sqlType)}`;
+    }
+
+    if (col.checkConstraint) {
+      stmt += ` CHECK (${col.name} IN (${col.checkConstraint.match(/IN \((.+)\)/)?.[1] ?? ''}))`;
+    }
+
+    lines.push(`${stmt};`);
+  }
+
+  if (removedCols.length > 0) {
+    lines.push('');
+    lines.push('-- Columns in prod not in contract (no action — D1 cannot DROP COLUMN):');
+    for (const col of removedCols) {
+      lines.push(`--   ${col}`);
+    }
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
 /**
  * Generate D1 migration SQL from a contract definition.
  */

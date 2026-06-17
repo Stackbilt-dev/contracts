@@ -1,5 +1,5 @@
-export { generateSQL } from './sql.js';
-export type { SQLGeneratorOptions } from './sql.js';
+export { generateSQL, generateMigration } from './sql.js';
+export type { SQLGeneratorOptions, MigrationGeneratorOptions } from './sql.js';
 
 export { generateRoutes } from './routes.js';
 export type { RouteGeneratorOptions } from './routes.js';
@@ -12,3 +12,6 @@ export type { TestGeneratorOptions } from './tests.js';
 
 export { generateOpenAPI } from './openapi.js';
 export type { OpenAPIGeneratorOptions } from './openapi.js';
+
+export { generateApiTypes } from './api-types.js';
+export type { ApiTypesGeneratorOptions } from './api-types.js';
