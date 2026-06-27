@@ -149,6 +149,19 @@ export type {
 } from './contracts/cc-task.contract.js';
 
 export {
+  AUTONOMY_LADDER,
+  restrictAutonomy,
+  reduceAutonomy,
+} from './contracts/agent-do.contract.js';
+
+export type {
+  AgentLifecycleStatus,
+  AgentDOState,
+  AgentDOContract,
+  AutonomyLevel,
+} from './contracts/agent-do.contract.js';
+
+export {
   BenchmarkAggregateCountsSchema,
   BenchmarkArtifactDigestSchema,
   BenchmarkCostSummarySchema,
