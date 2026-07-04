@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { defineContract } from '../src/core/define.js';
+import { defineContract, ref } from '../src/core/define.js';
 import { generateMigration, generateSQL } from '../src/generators/sql.js';
 import { UserContract } from '../src/contracts/user.contract.js';
-import { toCamelCase } from '../src/introspect/zod-walker.js';
+import { extractColumns, toCamelCase } from '../src/introspect/zod-walker.js';
 import { generateApiTypes } from '../src/generators/api-types.js';
 
 const PantryItemContract = defineContract({
@@ -152,6 +152,74 @@ describe('generateSQL boolean defaults (contracts#26)', () => {
     expect(sql).toContain('urgent INTEGER NOT NULL DEFAULT 1');
     expect(sql).not.toContain('DEFAULT false');
     expect(sql).not.toContain('DEFAULT true');
+  });
+});
+
+describe('self-referential ref() (contracts#22)', () => {
+  it('resolves a thunked self-ref to its own table via generateSQL', () => {
+    const GenerationJob = defineContract({
+      name: 'GenerationJob',
+      version: '1.0.0',
+      description: 'A generation job that may chain off a prior job',
+      schema: z.object({
+        id: z.string().uuid(),
+        inputJobId: ref(() => GenerationJob, 'id').optional(),
+        status: z.string(),
+      }),
+      operations: {},
+      surfaces: { db: { table: 'generation_jobs' } },
+      authority: {},
+    });
+
+    const sql = generateSQL(GenerationJob);
+    expect(sql).toContain('input_job_id TEXT');
+    expect(sql).toContain('-- input_job_id → generation_jobs(id)');
+  });
+
+  it('resolves a thunked self-ref via extractColumns without invoking the thunk before assignment', () => {
+    const GenerationJob = defineContract({
+      name: 'GenerationJob',
+      version: '1.0.0',
+      description: 'A generation job',
+      schema: z.object({
+        id: z.string().uuid(),
+        inputJobId: ref(() => GenerationJob, 'id').optional(),
+      }),
+      operations: {},
+      surfaces: { db: { table: 'generation_jobs' } },
+      authority: {},
+    });
+
+    const columns = extractColumns(GenerationJob.schema);
+    const col = columns.find(c => c.name === 'input_job_id');
+    expect(col?.isRef).toBe(true);
+    expect(col?.refTable).toBe('generation_jobs');
+    expect(col?.refField).toBe('id');
+  });
+
+  it('still resolves an ordinary (non-thunked) cross-contract ref', () => {
+    const Author = defineContract({
+      name: 'Author',
+      version: '1.0.0',
+      description: 'An author',
+      schema: z.object({ id: z.string().uuid() }),
+      operations: {},
+      surfaces: { db: { table: 'authors' } },
+      authority: {},
+    });
+
+    const Book = defineContract({
+      name: 'Book',
+      version: '1.0.0',
+      description: 'A book',
+      schema: z.object({ id: z.string().uuid(), authorId: ref(Author, 'id') }),
+      operations: {},
+      surfaces: { db: { table: 'books' } },
+      authority: {},
+    });
+
+    const sql = generateSQL(Book);
+    expect(sql).toContain('-- author_id → authors(id)');
   });
 });
 

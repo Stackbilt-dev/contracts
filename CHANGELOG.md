@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.0 - 2026-07-04
+
+### New Exports
+
+- **`ref(() => Contract, field)`** — `ref()` now also accepts a thunk, so a contract can express a self-referential FK against itself (e.g. `ref(() => GenerationJob, 'id')` inside `GenerationJob`'s own schema). The thunk is resolved lazily by generators after the module finishes evaluating, once the binding is initialized. Non-thunked `ref(Contract, field)` is unchanged. Closes contracts#22.
+- **`ContractOperation.transition.guard`** — an optional `(entity: unknown) => true | string` precondition over sibling fields, checked in addition to the `from` state match. `generateRoutes()` emits a 409 `GUARD_FAILED` response when the guard returns a string; `generateTests()` emits a conformance test against a passing fixture plus an `it.todo` for the untested rejection case (the generator can't synthesize a failing entity from an arbitrary predicate). The guard receives the raw persisted row (snake_case columns), not the camelCase entity shape. Closes contracts#24.
+
+## 0.7.0 - 2026-07-04
+
+### Fixed
+
+- **`generateSQL` / `generateMigration` — `columnOverrides` silently ignored.** Override lookup was keyed by the snake_case `ColumnDef.name`, but override keys are written against the schema's field names (commonly camelCase), so the lookup always missed — DB-level defaults like `CURRENT_TIMESTAMP` were silently dropped. Override keys are now normalized to snake_case before lookup, regardless of casing. Closes contracts#25.
+- **`generateSQL` — boolean `DEFAULT` literal.** `z.boolean().default(false)` emitted `DEFAULT false` instead of the codebase-wide `0`/`1` convention for SQLite INTEGER columns. Closes contracts#26.
+
 ## 0.6.0 - 2026-06-17
 
 ### New Exports

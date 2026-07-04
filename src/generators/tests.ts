@@ -95,6 +95,24 @@ export function generateTests(
           lines.push(`    expect(transitions['${op}']).toBe('${target}');`);
           lines.push(`  });`);
           lines.push('');
+
+          const guard = contract.operations[op]?.transition?.guard;
+          if (guard) {
+            // The generator has no way to synthesize an entity that fails an
+            // arbitrary predicate, so it can only assert conformance to the
+            // (entity) => true | string signature against a passing fixture
+            // here — it does NOT exercise rejection. The it.todo flags the
+            // real gap so the consumer fills in a failing-precondition case
+            // rather than mistaking this for full guard coverage.
+            lines.push(`  it('${op} guard conforms to (entity) => true | string', () => {`);
+            lines.push(`    const guard = ${contractVar}.operations.${op}.transition!.guard!;`);
+            lines.push(`    const result = guard(${generateValidFixture(contract)});`);
+            lines.push(`    expect(result).toBe(true);`);
+            lines.push(`  });`);
+            lines.push('');
+            lines.push(`  it.todo('${op} guard rejects transition when precondition fails — add a fixture with the failing field value');`);
+            lines.push('');
+          }
         }
       }
 

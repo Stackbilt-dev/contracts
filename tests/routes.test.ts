@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { defineContract, ref } from '../src/core/define.js';
 import { generateRoutes } from '../src/generators/routes.js';
+import { generateTests } from '../src/generators/tests.js';
 
 // ── Test contract ─────────────────────────────────────────────────────────
 
@@ -396,6 +397,86 @@ describe('generateRoutes', () => {
       });
       const result = generateRoutes(noApi);
       expect(result).toContain('no API surface defined');
+    });
+  });
+
+  // ── Guarded transitions (contracts#24) ─────────────────────────────────
+
+  describe('guarded transitions', () => {
+    const CcTaskLike = defineContract({
+      name: 'CcTaskLike',
+      version: '1.0.0',
+      description: 'A task with a guarded approval transition',
+      schema: z.object({
+        id: z.string(),
+        authority: z.enum(['proposed', 'operator']),
+        status: z.enum(['pending', 'running', 'done']),
+      }),
+      operations: {
+        approve: {
+          input: z.object({ id: z.string() }),
+          output: 'self',
+          transition: {
+            from: 'proposed',
+            to: 'operator',
+            guard: (entity) => {
+              const e = entity as { status: string };
+              return e.status === 'pending' ? true : `status must be pending, got ${e.status}`;
+            },
+          },
+        },
+      },
+      states: {
+        field: 'authority',
+        initial: 'proposed',
+        transitions: { proposed: { approve: 'operator' }, operator: {} },
+      },
+      surfaces: {
+        api: { basePath: '/tasks', routes: { approve: { method: 'POST', path: '/:id/approve' } } },
+        db: { table: 'cc_tasks_like' },
+      },
+      authority: { approve: { requires: 'role', roles: ['admin'] } },
+    });
+
+    const guardedOutput = generateRoutes(CcTaskLike);
+
+    it('emits the state guard before the field guard', () => {
+      const stateIdx = guardedOutput.indexOf("row.authority !== 'proposed'");
+      const guardIdx = guardedOutput.indexOf('guardResult');
+      expect(stateIdx).toBeGreaterThan(-1);
+      expect(guardIdx).toBeGreaterThan(stateIdx);
+    });
+
+    it('calls the operation-defined guard function against the row', () => {
+      expect(guardedOutput).toContain('CcTaskLikeContract.operations.approve.transition!.guard!(row)');
+    });
+
+    it('rejects with 409 GUARD_FAILED when the guard returns a string', () => {
+      expect(guardedOutput).toContain("code: 'GUARD_FAILED'");
+      expect(guardedOutput).toContain('typeof guardResult === \'string\' ? guardResult');
+      expect(guardedOutput).toContain('}, 409);');
+    });
+
+    it('does not emit guard code for transitions without a guard', () => {
+      expect(output).not.toContain('guardResult');
+    });
+
+    it('generateTests emits a real invocation of the guard against a passing fixture', () => {
+      const testsOutput = generateTests(CcTaskLike, { includeRouteIntegrationTests: false });
+      expect(testsOutput).toContain("it('approve guard conforms to (entity) => true | string'");
+      expect(testsOutput).toContain('CcTaskLikeContract.operations.approve.transition!.guard!');
+      expect(testsOutput).toContain('expect(result).toBe(true);');
+    });
+
+    it('generateTests flags the untested rejection case with it.todo rather than a hollow assertion', () => {
+      const testsOutput = generateTests(CcTaskLike, { includeRouteIntegrationTests: false });
+      expect(testsOutput).toContain("it.todo('approve guard rejects transition when precondition fails");
+    });
+
+    it('generateTests emits no guard test for RecipeContract (no guards defined)', () => {
+      const testsOutput = generateTests(RecipeContract, { includeRouteIntegrationTests: false });
+      expect(testsOutput).not.toContain('guard conforms to');
+      expect(testsOutput).not.toContain('guard rejects transition');
     });
   });
 

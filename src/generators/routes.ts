@@ -290,6 +290,7 @@ function emitTransitionHandler(
   const stateCol = toSnakeCase(stateField);
   const fromStates = Array.isArray(transition.from) ? transition.from : [transition.from];
   const toState = transition.to;
+  const hasGuard = !!transition.guard;
 
   // Body validation for non-GET/DELETE methods
   if (method !== 'get' && method !== 'delete') {
@@ -315,6 +316,15 @@ function emitTransitionHandler(
   }
   lines.push(`      return c.json({ error: { code: 'INVALID_STATE', message: \`Cannot ${routeName} from \${row.${stateCol}}\` } }, 409);`);
   lines.push(`    }`);
+
+  // Guard: precondition over sibling fields, checked in addition to the state
+  if (hasGuard) {
+    lines.push('');
+    lines.push(`    const guardResult = ${contractVar}.operations.${routeName}.transition!.guard!(row);`);
+    lines.push(`    if (guardResult !== true) {`);
+    lines.push(`      return c.json({ error: { code: 'GUARD_FAILED', message: typeof guardResult === 'string' ? guardResult : \`Guard rejected ${routeName}\` } }, 409);`);
+    lines.push(`    }`);
+  }
 
   lines.push(`    await db.prepare(\`UPDATE ${tableName} SET ${stateCol} = ? WHERE id = ?\`).bind('${toState}', id).run();`);
   emitEventCalls(lines, operation, contract.name, routeName, 'id', `{ ...row, ${stateCol}: '${toState}' }`, eventSinkExpression);

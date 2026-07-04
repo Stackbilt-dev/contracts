@@ -27,7 +27,24 @@ export interface ContractOperation<
   /** Output schema — 'self' means returns the entity itself */
   output: TOutput;
   /** State transition triggered by this operation */
-  transition?: { from: string | string[]; to: string };
+  transition?: {
+    from: string | string[];
+    to: string;
+    /**
+     * Precondition over sibling fields, evaluated in addition to the
+     * `from` state check. Same signature as ContractInvariant.check — return
+     * `true` to allow the transition, or a violation message to reject it.
+     * For "operation availability conditional on a field value" (rather than
+     * a state-machine peer), not "support multiple state machines per
+     * entity" — see contracts#24.
+     *
+     * generateRoutes() calls this against the raw persisted row (D1 result
+     * shape — snake_case columns), not the camelCase entity shape the schema
+     * infers. A guard reading `entity.retryCount` will see `undefined`;
+     * read `entity.retry_count` instead.
+     */
+    guard?: (entity: unknown) => true | string;
+  };
   /** Events emitted on success */
   emits?: string[];
 }
@@ -112,12 +129,19 @@ export function defineContract<TSchema extends z.ZodType>(
  * Cross-contract reference. Declares a typed foreign key.
  * Generators use the ref metadata to produce JOIN clauses and
  * referential integrity constraints.
+ *
+ * Accepts a thunk (`() => Contract`) for self-referential FKs, where the
+ * target contract is the one currently being constructed and doesn't exist
+ * yet at the point `ref()` is called inside its own `defineContract()` call
+ * — e.g. `ref(() => GenerationJob, 'id')` inside `GenerationJob`'s own
+ * schema. The thunk is only invoked by generators after the whole module
+ * has finished evaluating, by which point the binding is initialized.
  */
 export function ref<T extends ContractDefinition>(
-  contract: T,
+  contract: T | (() => T),
   field: string,
-): z.ZodString & { __ref: { contract: T; field: string } } {
-  const schema = z.string() as z.ZodString & { __ref: { contract: T; field: string } };
+): z.ZodString & { __ref: { contract: T | (() => T); field: string } } {
+  const schema = z.string() as z.ZodString & { __ref: { contract: T | (() => T); field: string } };
   schema.__ref = { contract, field };
   return schema;
 }

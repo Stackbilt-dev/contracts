@@ -156,10 +156,17 @@ function extractEnumValuesFromSchema(schema: z.ZodType): string[] | null {
   return getEnumValues(def);
 }
 
+type RefTarget = { surfaces: { db?: { table: string } }; name: string };
+
 function extractRef(schema: z.ZodType): { table: string; field: string } | null {
-  const s = schema as z.ZodType & { __ref?: { contract: { surfaces: { db?: { table: string } }; name: string }; field: string } };
+  const s = schema as z.ZodType & { __ref?: { contract: RefTarget | (() => RefTarget); field: string } };
   if (s.__ref) {
-    const table = s.__ref.contract.surfaces?.db?.table ?? toSnakeCase(s.__ref.contract.name) + 's';
+    // Self-referential FKs pass a thunk, since the target contract doesn't
+    // exist yet at the point ref() is called inside its own defineContract().
+    // By the time a generator walks the schema, the module has finished
+    // evaluating and the thunk resolves to the real contract.
+    const contract = typeof s.__ref.contract === 'function' ? s.__ref.contract() : s.__ref.contract;
+    const table = contract.surfaces?.db?.table ?? toSnakeCase(contract.name) + 's';
     return { table, field: s.__ref.field };
   }
   return null;
