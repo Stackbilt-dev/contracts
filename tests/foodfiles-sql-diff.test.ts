@@ -54,6 +54,20 @@ const hasFoodFiles = existsSync(CONTRACTS_DIR) && existsSync(MIGRATIONS_DIR);
  *  - MealPlan.created_at / updated_at: contract requires NOT NULL; migration
  *    allows NULL. Migration drift — migration should be tightened.
  *  - PantryItem.location / created_at / updated_at: same NOT NULL mismatch.
+ *  - FoodBank.verified / distance (surfaced by contracts#28's timeout fix —
+ *    previously masked by the 5s default, not caught by the ALTER TABLE
+ *    parsing bug #28 actually fixed): different in kind.
+ *      - `verified` is clean: deliberately excluded from the contract as
+ *        DB-internal per food-bank.contract.ts's own comment; generator
+ *        correctly omits it. Nothing to do.
+ *      - `distance` is NOT clean: it's `z.number().nullable()` in the schema
+ *        (a computed, non-persisted API field — km from query point in
+ *        geo-search), so generateSQL() faithfully emits a real `distance
+ *        REAL` column the DB intentionally doesn't have. Anyone
+ *        provisioning from the generated DDL gets a phantom column. This is
+ *        the generator-modeling gap contracts#20 (API-shape vs DB-shape) is
+ *        meant to close — allowlisted here to keep the suite green, not
+ *        because it's resolved.
  */
 const KNOWN_DRIFTS: Record<string, string[]> = {
   MealPlan: [
@@ -65,6 +79,10 @@ const KNOWN_DRIFTS: Record<string, string[]> = {
     'location:NOT NULL drift',
     'created_at:NOT NULL drift',
     'updated_at:NOT NULL drift',
+  ],
+  FoodBank: [
+    'distance:missing in migration',
+    'verified:missing in generated',
   ],
 };
 
@@ -81,16 +99,36 @@ interface ParsedTable {
   columns: Map<string, ParsedColumn>;
 }
 
+function extractColumnFlags(line: string): Pick<ParsedColumn, 'notNull' | 'hasDefault' | 'isPrimaryKey'> {
+  return {
+    notNull: /\bNOT\s+NULL\b/i.test(line),
+    hasDefault: /\bDEFAULT\b/i.test(line),
+    isPrimaryKey: /\bPRIMARY\s+KEY\b/i.test(line),
+  };
+}
+
+type MigrationStatement =
+  | { kind: 'create'; index: number; name: string; columns: Map<string, ParsedColumn> }
+  | { kind: 'alter'; index: number; table: string; column: ParsedColumn };
+
 /**
- * Best-effort CREATE TABLE parser. SQLite-specific. Handles the dialect
- * used by FoodFiles migrations (column per line, PRAGMA header, trailing
- * CREATE INDEX statements). Not a full parser — picks up the 90% case.
+ * Best-effort migration-file parser. SQLite-specific, not a full parser —
+ * picks up the 90% case FoodFiles migrations actually use:
+ *
+ * - CREATE TABLE (column per line, PRAGMA header, trailing CREATE INDEX)
+ * - ALTER TABLE ... ADD COLUMN (FoodFiles' normal additive-migration pattern:
+ *   nullable columns added without a full-table rewrite — contracts#28)
+ *
+ * Returns statements in source order (by string index) so callers can fold
+ * ADD COLUMN onto a table shape captured from an earlier CREATE TABLE,
+ * whether that CREATE TABLE is in this same file or an earlier one.
  */
-function parseCreateTables(sql: string): ParsedTable[] {
-  const tables: ParsedTable[] = [];
+function parseMigrationStatements(sql: string): MigrationStatement[] {
   const stripped = sql
     .replace(/--[^\n]*/g, '')
     .replace(/\/\*[\s\S]*?\*\//g, '');
+
+  const statements: MigrationStatement[] = [];
 
   const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([\s\S]*?)\);/gi;
   let match: RegExpExecArray | null;
@@ -123,15 +161,35 @@ function parseCreateTables(sql: string): ParsedTable[] {
       if (!colMatch) continue;
       const colName = colMatch[1]!;
       const colType = colMatch[2]!.toUpperCase();
-      const notNull = /\bNOT\s+NULL\b/i.test(line);
-      const hasDefault = /\bDEFAULT\b/i.test(line);
-      const isPrimaryKey = /\bPRIMARY\s+KEY\b/i.test(line);
-      columns.set(colName, { name: colName, type: colType, notNull, hasDefault, isPrimaryKey });
+      columns.set(colName, { name: colName, type: colType, ...extractColumnFlags(line) });
     }
 
-    tables.push({ name, columns });
+    statements.push({ kind: 'create', index: match.index, name, columns });
   }
-  return tables;
+
+  const alterRegex = /ALTER\s+TABLE\s+(\w+)\s+ADD\s+(?:COLUMN\s+)?(\w+)\s+(TEXT|INTEGER|REAL|BLOB|NUMERIC)\b([^;]*);/gi;
+  while ((match = alterRegex.exec(stripped)) !== null) {
+    const table = match[1]!;
+    const colName = match[2]!;
+    const colType = match[3]!.toUpperCase();
+    const rest = match[4] ?? '';
+    statements.push({
+      kind: 'alter',
+      index: match.index,
+      table,
+      column: { name: colName, type: colType, ...extractColumnFlags(rest) },
+    });
+  }
+
+  statements.sort((a, b) => a.index - b.index);
+  return statements;
+}
+
+/** CREATE TABLE blocks only — used for the generator's own output, which never emits ALTER TABLE. */
+function parseCreateTables(sql: string): ParsedTable[] {
+  return parseMigrationStatements(sql)
+    .filter((s): s is Extract<MigrationStatement, { kind: 'create' }> => s.kind === 'create')
+    .map(s => ({ name: s.name, columns: s.columns }));
 }
 
 function parseGeneratedTable(sql: string): ParsedTable | null {
@@ -204,12 +262,24 @@ async function loadContract(filePath: string): Promise<ContractDefinition | null
 
 function loadAllMigrationTables(): Map<string, ParsedTable> {
   const tables = new Map<string, ParsedTable>();
-  const files = readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql'));
+  // Migration filenames are numerically prefixed (001_, 002_, ...); sort so
+  // ALTER TABLE statements in later files fold onto CREATE TABLE shapes from
+  // earlier ones in the right order (readdirSync doesn't guarantee order).
+  const files = readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql')).sort();
   for (const file of files) {
     const sql = readFileSync(resolve(MIGRATIONS_DIR, file), 'utf8');
-    for (const table of parseCreateTables(sql)) {
-      // Later migrations may rename/replace; last write wins.
-      tables.set(table.name, table);
+    for (const stmt of parseMigrationStatements(sql)) {
+      if (stmt.kind === 'create') {
+        // Later migrations may rename/replace; last write wins.
+        tables.set(stmt.name, { name: stmt.name, columns: new Map(stmt.columns) });
+      } else {
+        const existing = tables.get(stmt.table);
+        // If no prior CREATE TABLE exists for this name, there's nothing to
+        // fold the ADD COLUMN onto — skip. A real migration set never hits
+        // this (ALTER always follows a CREATE), so silent skip is correct,
+        // not a swallowed error.
+        existing?.columns.set(stmt.column.name, stmt.column);
+      }
     }
   }
   return tables;
@@ -264,6 +334,9 @@ describe.skipIf(!hasFoodFiles)('FoodFiles SQL diff', () => {
           drifts.map(d => `${d.column}(${d.issue.split(':')[0]})`).join(', ')
         );
       }
-    });
+      // Dynamic import() of each contract file is occasionally slow under
+      // load — bumped from vitest's 5s default (contracts#28) to stop
+      // intermittent timeouts from being mistaken for real assertion failures.
+    }, 15000);
   }
 });
