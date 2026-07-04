@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.0 - 2026-07-04
+
+### New Exports
+
+- **MCP tool-invocation wire contract** (`src/contracts/mcp-tool-invocation.ts`) — zod schemas for the MCP JSON-RPC envelope actually implemented by `stackbilt-mcp-gateway` (`initialize`, `tools/list`, `tools/call`, JSON-RPC error shape), plus `McpTransportRequirementsSchema` documenting HTTP-layer rules the JSON-RPC body can't express (`POST /api/mcp` — not `/`, which routes through the OAuth wrapper and rejects non-OAuth bearer tokens before JSON-RPC handling even runs) and `InternalServiceBindingAuthSchema` / `buildInternalAuthHeaders()` for the `INTERNAL_API_KEY` + `X-Internal-User` bypass path (live in prod since commit 660596e) that Worker-to-Worker service-binding callers must use, since OAuth and per-user API keys are both unavailable to a Service Binding fetch. Derived from the gateway's actual runtime behavior (`src/gateway.ts`), not from spec — the gateway does not yet import these types; tarotscript#438's `McpClient` is the first conformer.
+
+Closes tarotscript#438 (Stackbilt-dev/tarotscript) — `McpClient` spoke a REST facade (`GET /tools`, `POST /invoke`) that never existed on the gateway; every tool-bound agent loop died turn 1 with `mcp_invoke_failed:404`.
+
 ## 0.12.0 - 2026-07-04
 
 ### New Exports
