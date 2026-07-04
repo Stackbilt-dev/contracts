@@ -47,6 +47,18 @@ export interface MigrationGeneratorOptions {
    * will be emitted as ALTER TABLE ADD COLUMN statements.
    */
   existingColumns: string[];
+  /**
+   * SQL types currently in the production table, keyed by column name — pass
+   * PRAGMA table_info's raw `type` field directly (e.g. `INT`, `VARCHAR(255)`,
+   * `DATETIME`, `BOOLEAN`). Compared against the contract's derived sqlType
+   * via SQLite type affinity, not string equality, so equivalent spellings
+   * (`INT` vs `INTEGER`, `VARCHAR(255)` vs `TEXT`) don't false-positive.
+   * Optional — when provided for a column present in both the contract and
+   * existingColumns, a genuine affinity mismatch emits a warning comment.
+   * SQLite has no ALTER COLUMN TYPE, so this is manual-review only, never an
+   * emitted statement.
+   */
+  existingColumnTypes?: Record<string, string>;
   /** Table name override */
   tableName?: string;
 }
@@ -58,6 +70,12 @@ export interface MigrationGeneratorOptions {
  * - ALTER TABLE ... ADD COLUMN ... for new columns
  * - Comments for columns present in prod but absent from the contract
  *   (D1 cannot DROP COLUMN; operator must decide manually)
+ * - A possible-rename warning when a removed column name closely matches
+ *   an added one (heuristic — never auto-renames, always still emits the
+ *   ADD COLUMN so the safe path is additive either way)
+ * - A type-change warning when existingColumnTypes is provided and a
+ *   shared column's production type doesn't match the contract's
+ *   (SQLite has no ALTER COLUMN TYPE, so this is manual-review only)
  *
  * Returns an empty migration (comment only) if no new columns are found.
  */
@@ -74,12 +92,60 @@ export function generateMigration(
   const contractColSet = new Set(columns.map(c => c.name.toLowerCase()));
   const removedCols = options.existingColumns.filter(c => !contractColSet.has(c.toLowerCase()));
 
+  // Possible-rename detection: pair each removed column with the closest
+  // unclaimed new column, if any are within edit-distance range. Heuristic
+  // only — always still emits ADD COLUMN for the new name and lists the old
+  // name as removed; this only adds a cross-reference comment, no renaming.
+  const renameHints = new Map<string, string>(); // newCol.name -> removedCol
+  const claimedNewCols = new Set<string>();
+  for (const removed of removedCols) {
+    let best: { name: string; distance: number } | null = null;
+    for (const nc of newCols) {
+      if (claimedNewCols.has(nc.name)) continue;
+      const distance = levenshteinDistance(removed.toLowerCase(), nc.name.toLowerCase());
+      const threshold = Math.max(2, Math.floor(Math.max(removed.length, nc.name.length) * 0.3));
+      if (distance <= threshold && (!best || distance < best.distance)) {
+        best = { name: nc.name, distance };
+      }
+    }
+    if (best) {
+      renameHints.set(best.name, removed);
+      claimedNewCols.add(best.name);
+    }
+  }
+
+  // Type-change detection for columns present in both contract and prod.
+  // Compared via SQLite type affinity, not raw string equality — PRAGMA
+  // table_info can report INT/BOOLEAN/VARCHAR(255)/DATETIME/etc, all of
+  // which are legitimately equivalent to this generator's TEXT/INTEGER/REAL
+  // vocabulary and must not be flagged as drift.
+  const typeChanges: Array<{ name: string; prodType: string; contractType: string }> = [];
+  if (options.existingColumnTypes) {
+    for (const col of columns) {
+      if (!existingSet.has(col.name.toLowerCase())) continue; // new column, not a change
+      const prodType = options.existingColumnTypes[col.name];
+      if (prodType && sqliteTypeAffinity(prodType) !== sqliteTypeAffinity(col.sqlType)) {
+        typeChanges.push({ name: col.name, prodType, contractType: col.sqlType });
+      }
+    }
+  }
+
   const lines: string[] = [];
   lines.push(`-- ALTER TABLE migration for ${tableName}`);
   lines.push(`-- Generated from ${contract.name} contract v${contract.version}`);
   lines.push('');
 
+  if (typeChanges.length > 0) {
+    lines.push('-- WARNING: possible type changes (SQLite has no ALTER COLUMN TYPE — manual review required):');
+    for (const tc of typeChanges) {
+      lines.push(`--   ${tc.name}: production is ${tc.prodType}, contract expects ${tc.contractType}`);
+    }
+    lines.push('');
+  }
+
   if (newCols.length === 0) {
+    // renameHints is always empty here — it's only ever populated by pairing
+    // a removed column against a *new* one, and there are none in this branch.
     lines.push('-- No new columns detected. Schema is up to date.');
     if (removedCols.length > 0) {
       lines.push('');
@@ -116,14 +182,22 @@ export function generateMigration(
       stmt += ` CHECK (${col.name} IN (${col.checkConstraint.match(/IN \((.+)\)/)?.[1] ?? ''}))`;
     }
 
-    lines.push(`${stmt};`);
+    stmt += ';';
+    const renamedFrom = renameHints.get(col.name);
+    if (renamedFrom) {
+      stmt += ` -- possible rename from '${renamedFrom}'? review before applying`;
+    }
+
+    lines.push(stmt);
   }
 
   if (removedCols.length > 0) {
     lines.push('');
     lines.push('-- Columns in prod not in contract (no action — D1 cannot DROP COLUMN):');
     for (const col of removedCols) {
-      lines.push(`--   ${col}`);
+      const matchedNewCol = [...renameHints.entries()].find(([, removed]) => removed === col)?.[0];
+      const renameNote = matchedNewCol ? ` — possible rename to '${matchedNewCol}'? review before applying` : '';
+      lines.push(`--   ${col}${renameNote}`);
     }
   }
 
@@ -253,4 +327,43 @@ function formatDefault(value: string, sqlType: string): string {
     return value;
   }
   return `'${value}'`;
+}
+
+/**
+ * SQLite type affinity rules (https://sqlite.org/datatype3.html#affinity),
+ * used to compare a contract's derived sqlType against a raw PRAGMA
+ * table_info type string without false-positiving on spelling differences
+ * that are equivalent under SQLite's own type system (INT vs INTEGER,
+ * VARCHAR(255) vs TEXT, DATETIME vs TEXT, BOOLEAN vs INTEGER, etc).
+ */
+function sqliteTypeAffinity(declaredType: string): 'INTEGER' | 'TEXT' | 'BLOB' | 'REAL' | 'NUMERIC' {
+  const t = declaredType.toUpperCase();
+  if (t.includes('INT')) return 'INTEGER';
+  if (t.includes('CHAR') || t.includes('CLOB') || t.includes('TEXT')) return 'TEXT';
+  if (t.includes('BLOB') || t === '') return 'BLOB';
+  if (t.includes('REAL') || t.includes('FLOA') || t.includes('DOUB')) return 'REAL';
+  return 'NUMERIC';
+}
+
+/** Standard edit-distance, used to heuristically flag possible column renames. */
+function levenshteinDistance(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const d: number[][] = Array.from({ length: rows }, () => new Array<number>(cols).fill(0));
+
+  for (let i = 0; i < rows; i++) d[i][0] = i;
+  for (let j = 0; j < cols; j++) d[0][j] = j;
+
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,
+        d[i][j - 1] + 1,
+        d[i - 1][j - 1] + cost,
+      );
+    }
+  }
+
+  return d[rows - 1][cols - 1];
 }

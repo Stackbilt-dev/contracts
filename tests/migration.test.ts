@@ -95,6 +95,109 @@ describe('generateMigration', () => {
   });
 });
 
+describe('generateMigration rename detection (contracts#18)', () => {
+  const NoteContract = defineContract({
+    name: 'Note',
+    version: '1.0.0',
+    description: 'A note',
+    schema: z.object({
+      id: z.string().uuid(),
+      note: z.string().optional(),
+    }),
+    operations: {},
+    surfaces: { db: { table: 'notes_table' } },
+    authority: {},
+  });
+
+  it('flags a possible rename when a removed column closely matches a new one', () => {
+    const sql = generateMigration(NoteContract, { existingColumns: ['id', 'notes'] });
+
+    expect(sql).toContain("ALTER TABLE notes_table ADD COLUMN note TEXT; -- possible rename from 'notes'? review before applying");
+    expect(sql).toContain("--   notes — possible rename to 'note'? review before applying");
+  });
+
+  it('does not flag unrelated columns as renames', () => {
+    const sql = generateMigration(PantryItemContract, {
+      existingColumns: ['id', 'user_id', 'name', 'category', 'created_at', 'updated_at'],
+    });
+
+    expect(sql).toContain('--   category');
+    expect(sql).not.toContain('possible rename');
+  });
+});
+
+describe('generateMigration type-change detection (contracts#18)', () => {
+  it('warns when existingColumnTypes reports a type mismatch', () => {
+    const sql = generateMigration(PantryItemContract, {
+      existingColumns: ['id', 'user_id', 'name', 'quantity', 'unit', 'expiry_date', 'notes', 'created_at', 'updated_at'],
+      existingColumnTypes: { quantity: 'TEXT' },
+    });
+
+    expect(sql).toContain('WARNING: possible type changes');
+    expect(sql).toContain('quantity: production is TEXT, contract expects REAL');
+  });
+
+  it('does not warn when types match', () => {
+    const sql = generateMigration(PantryItemContract, {
+      existingColumns: ['id', 'user_id', 'name', 'quantity', 'unit', 'expiry_date', 'notes', 'created_at', 'updated_at'],
+      existingColumnTypes: { quantity: 'REAL' },
+    });
+
+    expect(sql).not.toContain('WARNING: possible type changes');
+  });
+
+  it('does not warn about columns absent from existingColumnTypes', () => {
+    const sql = generateMigration(PantryItemContract, {
+      existingColumns: ['id', 'user_id', 'name', 'quantity', 'unit', 'expiry_date', 'notes', 'created_at', 'updated_at'],
+      existingColumnTypes: {},
+    });
+
+    expect(sql).not.toContain('WARNING: possible type changes');
+  });
+
+  it('compares by SQLite type affinity, not raw string equality, to avoid false-positive drift', () => {
+    // 'INT' and 'VARCHAR(255)' are real PRAGMA table_info spellings that are
+    // equivalent to this generator's INTEGER/TEXT vocabulary under SQLite's
+    // own affinity rules — must not warn.
+    const NumberIdContract = defineContract({
+      name: 'NumberIdContract',
+      version: '1.0.0',
+      description: 'test',
+      schema: z.object({ id: z.string().uuid(), count: z.number().int(), label: z.string() }),
+      operations: {},
+      surfaces: { db: { table: 'number_ids' } },
+      authority: {},
+    });
+
+    const sql = generateMigration(NumberIdContract, {
+      existingColumns: ['id', 'count', 'label'],
+      existingColumnTypes: { count: 'INT', label: 'VARCHAR(255)' },
+    });
+
+    expect(sql).not.toContain('WARNING: possible type changes');
+  });
+
+  it('still warns when affinities genuinely differ, even with non-canonical PRAGMA spelling', () => {
+    const NumberIdContract = defineContract({
+      name: 'NumberIdContract',
+      version: '1.0.0',
+      description: 'test',
+      schema: z.object({ id: z.string().uuid(), count: z.number().int() }),
+      operations: {},
+      surfaces: { db: { table: 'number_ids' } },
+      authority: {},
+    });
+
+    const sql = generateMigration(NumberIdContract, {
+      existingColumns: ['id', 'count'],
+      existingColumnTypes: { count: 'VARCHAR(50)' }, // TEXT affinity vs contract's INTEGER
+    });
+
+    expect(sql).toContain('WARNING: possible type changes');
+    expect(sql).toContain("count: production is VARCHAR(50), contract expects INTEGER");
+  });
+});
+
 describe('generateSQL columnOverrides', () => {
   it('applies columnOverrides declared with camelCase keys (contracts#25)', () => {
     const sql = generateSQL(PantryItemContract);

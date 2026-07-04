@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0 - 2026-07-04
+
+### New Exports
+
+- **`MigrationGeneratorOptions.existingColumnTypes`** — optional, keyed by column name, values are raw PRAGMA `table_info` type strings (`INT`, `VARCHAR(255)`, `DATETIME`, etc). `generateMigration()` now emits a `-- WARNING: possible type changes` comment when a shared column's production type and the contract's derived type have different SQLite type affinities. Compared by affinity, not string equality, so equivalent spellings don't false-positive.
+- **`generateMigration()` rename detection** — when a removed column name is a close edit-distance match to a newly-added one, both the `ADD COLUMN` statement and the removed-column comment get a `-- possible rename …? review before applying` cross-reference. Heuristic only — never auto-renames; the safe additive `ADD COLUMN` path is unchanged either way.
+
+Closes contracts#18.
+
 ## 0.8.0 - 2026-07-04
 
 ### New Exports
