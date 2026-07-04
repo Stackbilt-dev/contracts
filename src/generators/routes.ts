@@ -288,9 +288,16 @@ function emitTransitionHandler(
   const transition = operation.transition!;
   const stateField = contract.states?.field ?? 'status';
   const stateCol = toSnakeCase(stateField);
-  const fromStates = Array.isArray(transition.from) ? transition.from : [transition.from];
+  // Pure guarded-write operations (contracts#29) omit from/to entirely —
+  // they don't transition states.field at all, only guard+write other
+  // fields. Don't fake a same-state pseudo-transition to detect this.
+  const hasStateTransition = transition.from !== undefined && transition.to !== undefined;
+  const fromStates = hasStateTransition
+    ? (Array.isArray(transition.from) ? transition.from : [transition.from as string])
+    : [];
   const toState = transition.to;
   const hasGuard = !!transition.guard;
+  const writesKeys = transition.writes ? Object.keys(transition.writes) : [];
 
   // Body validation for non-GET/DELETE methods
   if (method !== 'get' && method !== 'delete') {
@@ -307,17 +314,20 @@ function emitTransitionHandler(
   lines.push(`    const row = await db.prepare(\`SELECT * FROM ${tableName} WHERE id = ?\`).bind(id).first();`);
   lines.push(`    if (!row) return c.json({ error: { code: 'NOT_FOUND', message: '${contract.name} not found' } }, 404);`);
 
-  // State guard
-  if (fromStates.length === 1) {
-    lines.push(`    if (row.${stateCol} !== '${fromStates[0]}') {`);
-  } else {
-    const fromCheck = fromStates.map(s => `'${s}'`).join(', ');
-    lines.push(`    if (![${fromCheck}].includes(row.${stateCol} as string)) {`);
+  // State guard — only for operations that actually transition states.field
+  if (hasStateTransition) {
+    if (fromStates.length === 1) {
+      lines.push(`    if (row.${stateCol} !== '${fromStates[0]}') {`);
+    } else {
+      const fromCheck = fromStates.map(s => `'${s}'`).join(', ');
+      lines.push(`    if (![${fromCheck}].includes(row.${stateCol} as string)) {`);
+    }
+    lines.push(`      return c.json({ error: { code: 'INVALID_STATE', message: \`Cannot ${routeName} from \${row.${stateCol}}\` } }, 409);`);
+    lines.push(`    }`);
   }
-  lines.push(`      return c.json({ error: { code: 'INVALID_STATE', message: \`Cannot ${routeName} from \${row.${stateCol}}\` } }, 409);`);
-  lines.push(`    }`);
 
-  // Guard: precondition over sibling fields, checked in addition to the state
+  // Guard: precondition over sibling fields, checked in addition to (or, for
+  // a pure guarded-write with no state transition, instead of) the state guard.
   if (hasGuard) {
     lines.push('');
     lines.push(`    const guardResult = ${contractVar}.operations.${routeName}.transition!.guard!(row);`);
@@ -326,9 +336,37 @@ function emitTransitionHandler(
     lines.push(`    }`);
   }
 
-  lines.push(`    await db.prepare(\`UPDATE ${tableName} SET ${stateCol} = ? WHERE id = ?\`).bind('${toState}', id).run();`);
-  emitEventCalls(lines, operation, contract.name, routeName, 'id', `{ ...row, ${stateCol}: '${toState}' }`, eventSinkExpression);
-  lines.push(`    return c.json({ data: { ...row, ${stateCol}: '${toState}' } });`);
+  // Resolve additional field writes (literal or a function of the row) once,
+  // so the resolved value is reused for both the UPDATE bind and the response.
+  for (const key of writesKeys) {
+    lines.push('');
+    lines.push(`    const ${key}Writer = ${contractVar}.operations.${routeName}.transition!.writes!['${key}'];`);
+    lines.push(`    const ${key}Value = typeof ${key}Writer === 'function' ? (${key}Writer as (e: unknown) => unknown)(row) : ${key}Writer;`);
+  }
+
+  const setClauses: string[] = [];
+  const bindExprs: string[] = [];
+  if (hasStateTransition) {
+    setClauses.push(`${stateCol} = ?`);
+    bindExprs.push(`'${toState}'`);
+  }
+  for (const key of writesKeys) {
+    setClauses.push(`${toSnakeCase(key)} = ?`);
+    bindExprs.push(`${key}Value`);
+  }
+
+  lines.push('');
+  lines.push(`    await db.prepare(\`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = ?\`).bind(${bindExprs.join(', ')}, id).run();`);
+
+  const responseFields = [
+    '...row',
+    ...(hasStateTransition ? [`${stateCol}: '${toState}'`] : []),
+    ...writesKeys.map(key => `${toSnakeCase(key)}: ${key}Value`),
+  ];
+  const responseExpr = `{ ${responseFields.join(', ')} }`;
+
+  emitEventCalls(lines, operation, contract.name, routeName, 'id', responseExpr, eventSinkExpression);
+  lines.push(`    return c.json({ data: ${responseExpr} });`);
 }
 
 function emitEventCalls(

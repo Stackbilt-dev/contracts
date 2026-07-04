@@ -18,6 +18,66 @@ import { z } from 'zod';
 
 // ── Operation ────────────────────────────────────────────────────────────
 
+/**
+ * A literal value, or a function of the persisted row, for an additional
+ * field write. Structurally this is just `unknown` — TypeScript can't
+ * discriminate a bare function type from `unknown` in a union — the
+ * function arm exists to document intent; generateRoutes()'s
+ * `typeof x === 'function'` check at codegen time is what actually
+ * distinguishes them.
+ */
+export type TransitionWriteValue = unknown | ((entity: unknown) => unknown);
+
+/**
+ * Precondition over sibling fields. Same signature as ContractInvariant.check
+ * — return `true` to allow, or a violation message to reject.
+ *
+ * generateRoutes() calls this against the raw persisted row (D1 result shape
+ * — snake_case columns), not the camelCase entity shape the schema infers.
+ * A guard reading `entity.retryCount` will see `undefined`; read
+ * `entity.retry_count` instead.
+ */
+export type TransitionGuard = (entity: unknown) => true | string;
+
+export type ContractTransition =
+  | {
+      /** States.field values this operation is valid from. */
+      from: string | string[];
+      /** States.field value this operation transitions to. */
+      to: string;
+      guard?: TransitionGuard;
+      /**
+       * Additional field writes beyond states.field, applied in the same
+       * UPDATE. For "this operation also changes field X" alongside the
+       * state transition.
+       *
+       * A function value is called with the same raw persisted row (D1
+       * result shape — snake_case columns) that `guard` receives — not
+       * request input, not auth context, not the camelCase entity shape.
+       * It can only compute from what's already on the row (e.g. derive one
+       * column from another); it cannot see the incoming request body or
+       * the caller's identity.
+       */
+      writes?: Record<string, TransitionWriteValue>;
+    }
+  | {
+      // No states.field involvement at all — see the writes-only variant below.
+      from?: undefined;
+      to?: undefined;
+      guard?: TransitionGuard;
+      /**
+       * Pure guarded field-write: the operation doesn't transition
+       * states.field (may not even change it), it writes these fields,
+       * gated by `guard`. For "operation availability/effect conditional on
+       * a field value" that isn't itself a state-machine transition — e.g.
+       * `cc_tasks.approve` changes `authority`, not `status`, gated by
+       * `status === 'pending'` — see contracts#29. Don't fake this with a
+       * same-state `from`/`to` pseudo-transition; it silently implies a
+       * status write that isn't happening.
+       */
+      writes: Record<string, TransitionWriteValue>;
+    };
+
 export interface ContractOperation<
   TInput extends z.ZodType = z.ZodType,
   TOutput extends z.ZodType | 'self' = z.ZodType | 'self',
@@ -26,25 +86,8 @@ export interface ContractOperation<
   input: TInput;
   /** Output schema — 'self' means returns the entity itself */
   output: TOutput;
-  /** State transition triggered by this operation */
-  transition?: {
-    from: string | string[];
-    to: string;
-    /**
-     * Precondition over sibling fields, evaluated in addition to the
-     * `from` state check. Same signature as ContractInvariant.check — return
-     * `true` to allow the transition, or a violation message to reject it.
-     * For "operation availability conditional on a field value" (rather than
-     * a state-machine peer), not "support multiple state machines per
-     * entity" — see contracts#24.
-     *
-     * generateRoutes() calls this against the raw persisted row (D1 result
-     * shape — snake_case columns), not the camelCase entity shape the schema
-     * infers. A guard reading `entity.retryCount` will see `undefined`;
-     * read `entity.retry_count` instead.
-     */
-    guard?: (entity: unknown) => true | string;
-  };
+  /** State transition and/or guarded field-write triggered by this operation */
+  transition?: ContractTransition;
   /** Events emitted on success */
   emits?: string[];
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0 - 2026-07-04
+
+### New Exports
+
+- **`ContractOperation.transition.writes`** — additional field writes beyond `states.field`, applied in the same generated `UPDATE`. Value is a literal or a function of the raw persisted row (same shape `guard` receives — snake_case, not request input, not auth context). `from`/`to` are now optional together: an operation can be a pure guarded field-write with no state-machine involvement at all (e.g. `cc_tasks.approve` writes `authority`, gated on `status`, without transitioning `status`) — `generateRoutes()` correctly omits the state-guard check for this shape rather than requiring a same-state `from`/`to` pseudo-transition. `ContractTransition`, `TransitionGuard`, and `TransitionWriteValue` types exported.
+
+Closes contracts#29.
+
 ## 0.10.0 - 2026-07-04
 
 ### New Exports

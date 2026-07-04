@@ -480,6 +480,112 @@ describe('generateRoutes', () => {
     });
   });
 
+  // ── Transition writes to fields beyond states.field (contracts#29) ─────
+
+  describe('transition writes', () => {
+    // The exact motivating case: `approve` doesn't transition `status` at
+    // all — it writes `authority`, gated by a guard on `status`.
+    const PureGuardedWrite = defineContract({
+      name: 'CcTaskLike2',
+      version: '1.0.0',
+      description: 'approve writes authority, gated on status, without transitioning status',
+      schema: z.object({
+        id: z.string(),
+        authority: z.enum(['proposed', 'operator']),
+        status: z.enum(['pending', 'running', 'done']),
+      }),
+      operations: {
+        approve: {
+          input: z.object({ id: z.string() }),
+          output: 'self',
+          transition: {
+            guard: (entity) => {
+              const e = entity as { status: string };
+              return e.status === 'pending' ? true : `status must be pending, got ${e.status}`;
+            },
+            writes: { authority: 'operator' },
+          },
+        },
+      },
+      states: { field: 'status', initial: 'pending', transitions: { pending: {}, running: {}, done: {} } },
+      surfaces: {
+        api: { basePath: '/tasks2', routes: { approve: { method: 'POST', path: '/:id/approve' } } },
+        db: { table: 'cc_tasks_like_2' },
+      },
+      authority: { approve: { requires: 'role', roles: ['admin'] } },
+    });
+
+    const pureWriteOutput = generateRoutes(PureGuardedWrite);
+
+    it('emits no state-guard check when the operation has no from/to', () => {
+      expect(pureWriteOutput).not.toContain('INVALID_STATE');
+    });
+
+    it('still emits the field guard', () => {
+      expect(pureWriteOutput).toContain('CcTaskLike2Contract.operations.approve.transition!.guard!(row)');
+      expect(pureWriteOutput).toContain("code: 'GUARD_FAILED'");
+    });
+
+    it('resolves the write value (literal) and applies it in the UPDATE', () => {
+      expect(pureWriteOutput).toContain("const authorityWriter = CcTaskLike2Contract.operations.approve.transition!.writes!['authority'];");
+      expect(pureWriteOutput).toContain('UPDATE cc_tasks_like_2 SET authority = ? WHERE id = ?');
+      expect(pureWriteOutput).toContain('.bind(authorityValue, id)');
+    });
+
+    it('reflects the written field in the response payload', () => {
+      expect(pureWriteOutput).toContain('{ ...row, authority: authorityValue }');
+    });
+
+    // Combined case: a real state transition AND an additional field write
+    // in the same operation. The write function can only compute from the
+    // row itself (per its documented contract) — here, deriving a slug from
+    // the row's own title at publish time, not from request/actor data.
+    const CombinedTransitionAndWrite = defineContract({
+      name: 'Job',
+      version: '1.0.0',
+      description: 'publish transitions status and derives slug from the row',
+      schema: z.object({
+        id: z.string(),
+        title: z.string(),
+        status: z.enum(['draft', 'published']),
+        slug: z.string().nullable(),
+      }),
+      operations: {
+        publish: {
+          input: z.object({ id: z.string() }),
+          output: 'self',
+          transition: {
+            from: 'draft',
+            to: 'published',
+            writes: { slug: (entity) => (entity as { title: string }).title.toLowerCase().replace(/\s+/g, '-') },
+          },
+        },
+      },
+      states: { field: 'status', initial: 'draft', transitions: { draft: { publish: 'published' }, published: {} } },
+      surfaces: {
+        api: { basePath: '/jobs', routes: { publish: { method: 'POST', path: '/:id/publish' } } },
+        db: { table: 'jobs' },
+      },
+      authority: { publish: { requires: 'public' } },
+    });
+
+    const combinedOutput = generateRoutes(CombinedTransitionAndWrite);
+
+    it('emits both the state guard and the write for a combined transition', () => {
+      expect(combinedOutput).toContain("row.status !== 'draft'");
+      expect(combinedOutput).toContain("const slugWriter = JobContract.operations.publish.transition!.writes!['slug'];");
+    });
+
+    it('sets both the state column and the written column in one UPDATE, in order', () => {
+      expect(combinedOutput).toContain('UPDATE jobs SET status = ?, slug = ? WHERE id = ?');
+      expect(combinedOutput).toContain(".bind('published', slugValue, id)");
+    });
+
+    it('resolves a function-valued write by calling it with the row', () => {
+      expect(combinedOutput).toContain('typeof slugWriter === \'function\' ? (slugWriter as (e: unknown) => unknown)(row) : slugWriter');
+    });
+  });
+
   // ── Table name fallback ───────────────────────────────────────────────
 
   describe('table name fallback', () => {

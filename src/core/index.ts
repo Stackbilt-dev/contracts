@@ -7,6 +7,9 @@ export {
 export type {
   ContractDefinition,
   ContractOperation,
+  ContractTransition,
+  TransitionGuard,
+  TransitionWriteValue,
   ContractStates,
   ContractSurface,
   ApiSurface,
