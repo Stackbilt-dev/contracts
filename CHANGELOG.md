@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0 - 2026-07-04
+
+### New Exports
+
+- **`toApiShape(contract)`** — runtime camelCase projection of a contract's schema, returned as an actual Zod object (not a TS type string like `generateApiTypes`). Reuses the original field schema instances by reference, so `optional()`/`default()`/`ref()` wrappers are preserved. `z.infer` on the result reports genuinely camelCase keys — the type-level transform mirrors `toCamelCase`'s runtime regex exactly (an underscore not immediately followed by a lowercase letter, e.g. `address_2` or `foo__bar`, is left untouched on both sides, not just split-on-`_`).
+- **`toDbShape(contract, apiInput)`** — inverse of `toApiShape`: remaps camelCase API input keys back to the contract's actual DB column names (always snake_case, matching `extractColumns()`), directly usable for a D1 write. Mechanical key rename only, no validation.
+
+Closes contracts#20.
+
 ## 0.9.0 - 2026-07-04
 
 ### New Exports

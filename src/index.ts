@@ -57,6 +57,8 @@ export {
   generateTests,
   generateOpenAPI,
   generateApiTypes,
+  toApiShape,
+  toDbShape,
 } from './generators/index.js';
 
 // Product-specific contracts live in their consumer repos (private).

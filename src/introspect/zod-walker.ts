@@ -175,6 +175,20 @@ function extractRef(schema: z.ZodType): { table: string; field: string } | null 
 // ── Schema walking ───────────────────────────────────────────────────────
 
 /**
+ * Get a ZodObject schema's field shape (key -> field schema instance),
+ * version-agnostic (v3/v4). Returns null for non-object schemas. Not part of
+ * the public API (not re-exported from introspect/index.ts) — used by other
+ * generators (e.g. api-shape.ts) to rebuild a schema with renamed keys while
+ * reusing the original field schema instances (preserving optional/default/
+ * ref wrappers) rather than re-deriving them.
+ */
+export function getObjectShape(schema: z.ZodType): Record<string, z.ZodType> | null {
+  const def = asDef(schema);
+  if (getTypeName(def) !== 'ZodObject') return null;
+  return getShape(def);
+}
+
+/**
  * Walk a Zod object schema and extract column definitions for D1.
  */
 export function extractColumns(schema: z.ZodType): ColumnDef[] {

@@ -15,3 +15,5 @@ export type { OpenAPIGeneratorOptions } from './openapi.js';
 
 export { generateApiTypes } from './api-types.js';
 export type { ApiTypesGeneratorOptions } from './api-types.js';
+
+export { toApiShape, toDbShape } from './api-shape.js';
