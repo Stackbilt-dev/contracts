@@ -12,8 +12,24 @@
  * Output is valid SQLite/D1 SQL.
  */
 
-import type { ContractDefinition } from '../core/define.js';
+import type { ContractDefinition, DbSurface } from '../core/define.js';
 import { extractColumns, toSnakeCase } from '../introspect/zod-walker.js';
+
+/**
+ * columnOverrides keys are written against the contract's schema field
+ * names (commonly camelCase), but ColumnDef.name is always toSnakeCase()'d.
+ * Re-key by snake_case so lookups by col.name always match regardless of
+ * how the override key was written.
+ */
+function normalizeColumnOverrides(
+  columnOverrides: DbSurface['columnOverrides'],
+): Record<string, { default?: string }> {
+  const result: Record<string, { default?: string }> = {};
+  for (const [key, value] of Object.entries(columnOverrides ?? {})) {
+    result[toSnakeCase(key)] = value;
+  }
+  return result;
+}
 
 export interface SQLGeneratorOptions {
   /** Include DROP TABLE IF EXISTS before CREATE */
@@ -51,7 +67,7 @@ export function generateMigration(
 ): string {
   const tableName = options.tableName ?? contract.surfaces.db?.table ?? toSnakeCase(contract.name) + 's';
   const columns = extractColumns(contract.schema);
-  const colOverrides = contract.surfaces.db?.columnOverrides ?? {};
+  const colOverrides = normalizeColumnOverrides(contract.surfaces.db?.columnOverrides);
   const existingSet = new Set(options.existingColumns.map(c => c.toLowerCase()));
 
   const newCols = columns.filter(c => !existingSet.has(c.name.toLowerCase()));
@@ -126,7 +142,7 @@ export function generateSQL(
   const tableName = options.tableName ?? contract.surfaces.db?.table ?? toSnakeCase(contract.name) + 's';
   const columns = extractColumns(contract.schema);
   const uniqueCols = new Set(contract.surfaces.db?.uniqueColumns ?? []);
-  const colOverrides = contract.surfaces.db?.columnOverrides ?? {};
+  const colOverrides = normalizeColumnOverrides(contract.surfaces.db?.columnOverrides);
   const lines: string[] = [];
 
   // Header comment
@@ -218,6 +234,12 @@ export function generateSQL(
 }
 
 function formatDefault(value: string, sqlType: string): string {
+  // Zod booleans map to INTEGER (SQLite has no native BOOLEAN type); the
+  // convention used everywhere else in this codebase's hand-written D1
+  // migrations is the 0/1 literal, not the true/false keyword alias.
+  if (value === 'true' || value === 'false') {
+    return value === 'true' ? '1' : '0';
+  }
   // JSON string values come through as '"value"'
   if (value.startsWith('"') && value.endsWith('"')) {
     return `'${value.slice(1, -1)}'`;

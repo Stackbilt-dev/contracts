@@ -95,6 +95,66 @@ describe('generateMigration', () => {
   });
 });
 
+describe('generateSQL columnOverrides', () => {
+  it('applies columnOverrides declared with camelCase keys (contracts#25)', () => {
+    const sql = generateSQL(PantryItemContract);
+
+    expect(sql).toContain('created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP');
+    expect(sql).toContain('updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP');
+  });
+
+  it('applies columnOverrides declared with snake_case keys too', () => {
+    const contract = defineContract({
+      ...PantryItemContract,
+      surfaces: {
+        db: {
+          table: 'pantry_items',
+          columnOverrides: {
+            created_at: { default: 'CURRENT_TIMESTAMP' },
+          },
+        },
+      },
+    });
+
+    const sql = generateSQL(contract);
+    expect(sql).toContain('created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP');
+  });
+
+  it('applies camelCase columnOverrides in generateMigration ADD COLUMN output too', () => {
+    const sql = generateMigration(PantryItemContract, {
+      existingColumns: ['id', 'user_id', 'name', 'quantity', 'unit', 'expiry_date', 'notes'],
+    });
+
+    expect(sql).toMatch(/ADD COLUMN created_at.*DEFAULT CURRENT_TIMESTAMP/);
+    expect(sql).toMatch(/ADD COLUMN updated_at.*DEFAULT CURRENT_TIMESTAMP/);
+  });
+});
+
+describe('generateSQL boolean defaults (contracts#26)', () => {
+  it('emits 0/1 for boolean column defaults instead of true/false', () => {
+    const contract = defineContract({
+      name: 'Job',
+      version: '1.0.0',
+      description: 'A job with a retryable flag',
+      schema: z.object({
+        id: z.string().uuid(),
+        retryable: z.boolean().default(false),
+        urgent: z.boolean().default(true),
+      }),
+      operations: {},
+      surfaces: { db: { table: 'jobs' } },
+      authority: {},
+    });
+
+    const sql = generateSQL(contract);
+
+    expect(sql).toContain('retryable INTEGER NOT NULL DEFAULT 0');
+    expect(sql).toContain('urgent INTEGER NOT NULL DEFAULT 1');
+    expect(sql).not.toContain('DEFAULT false');
+    expect(sql).not.toContain('DEFAULT true');
+  });
+});
+
 describe('UserContract', () => {
   it('generates valid CREATE TABLE SQL', () => {
     const sql = generateSQL(UserContract);
