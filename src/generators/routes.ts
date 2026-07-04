@@ -30,6 +30,12 @@ export interface RouteGeneratorOptions {
 
 /**
  * Generate Hono route handler code from a contract definition.
+ *
+ * @deprecated Emits a string requiring manual paste/eval — cannot be
+ * type-checked by tsc or composed with typed AppEnv generics (contracts#17).
+ * Use `toHonoRouter` from `@stackbilt/contracts/hono` instead, which returns
+ * a real, importable `Hono` instance. Kept for existing consumers per the
+ * additive-only OSS policy — not removed.
  */
 export function generateRoutes(
   contract: ContractDefinition,
@@ -391,7 +397,13 @@ function emitEventCalls(
   }
 }
 
-function buildSelectQuery(contract: ContractDefinition, tableName: string): { getByIdSql: string; listSql: string } {
+/**
+ * Not re-exported from generators/index.ts — internal cross-module reuse
+ * only (e.g. by the ./hono runtime router), same pattern as importing
+ * extractColumns/toSnakeCase across files. Pure string-builder over
+ * extractColumns(), no codegen-specific state, safe to call directly.
+ */
+export function buildSelectQuery(contract: ContractDefinition, tableName: string): { getByIdSql: string; listSql: string } {
   const refs = extractColumns(contract.schema).filter(col => col.isRef && col.refTable && col.refField);
   if (refs.length === 0) {
     return {

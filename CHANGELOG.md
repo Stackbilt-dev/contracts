@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.0 - 2026-07-04
+
+### New Exports
+
+- **`toHonoRouter(contract, deps)`** (new `@stackbilt/contracts/hono` subpath) — returns a real, importable `Hono` instance instead of `generateRoutes()`'s string codegen, which required manual paste/eval and couldn't be type-checked or composed with typed `AppEnv` generics. Dependency injection (`HonoRouterDeps`: `getDb`, optional `auth.{requireAuth,requireOwner,requireRole}`, optional `eventSink`) replaces the string codegen's hardcoded `c.env.DB` and `'../middleware/auth'` import. Throws at router-build time — not per-request — if a route needs an auth capability `deps.auth` doesn't supply. Covers all 6 handler shapes (create/get/list/update/delete/transition, transition covering both #29 sub-shapes) with behavior identical to `generateRoutes()`'s generated code, verified via real `app.request()` calls rather than string/syntax matching. `hono` is an optional peer dependency — core `@stackbilt/contracts` stays zod-only; only importing from `./hono` pulls it in.
+- `generateRoutes()` is now `@deprecated` (JSDoc only, not removed — additive-only policy) pointing at `toHonoRouter`.
+
+Closes contracts#17.
+
 ## 0.11.0 - 2026-07-04
 
 ### New Exports
