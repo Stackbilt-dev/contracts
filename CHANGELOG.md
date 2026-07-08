@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.0 - 2026-07-08
+
+### New Exports
+
+- **`toAuditChainWriteOptions(envelope, options?)`** (`src/contracts/attestation-envelope.ts`) — bridges `AttestationEnvelope` into `@stackbilt/audit-chain`'s `writeRecord()` options. `AttestationEnvelope` and audit-chain's `AuditRecord` are different layers, not the same shape: the 0.5.0 CHANGELOG entry describing `AttestationEnvelope` as the "canonical shape for... audit-chain entries" was aspirational and, as of this release, still had zero real consumers — none of the four named instances (stackd, audit-chain, reading-envelope, evals) had adopted it, and audit-chain's actual `AuditRecord` (`record_id, namespace, event_type, hash, prev_hash, actor, timestamp, payload, metadata?`) shares no field vocabulary with the envelope (`traceId, tenantId, ticketRef, model, costUsd, result, sealedAt, hmac`). This function makes the envelope the record's `payload` rather than forcing a field-for-field merge, and derives sensible `namespace`/`actor` defaults from `tenantId`/`agentId` for the chain-identity fields the envelope has none for. `AuditChainWriteOptions` and `ToAuditChainOptions` types exported alongside it.
+
+Surfaced while scoping a generalized rubric-contract primitive off of `@stackbilt/evidence-core`'s bespoke `src/audit/adapter.ts`, which independently reimplements this exact bridge (correctly, matching audit-chain's real shape) because no shared version existed to depend on.
+
 ## 0.13.0 - 2026-07-04
 
 ### New Exports
