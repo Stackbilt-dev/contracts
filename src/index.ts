@@ -129,9 +129,14 @@ export type { Posture, PostureSignal, PostureGateResult } from './contracts/post
 export {
   AttestationEnvelopeSchema,
   canonicalPayload,
+  toAuditChainWriteOptions,
 } from './contracts/attestation-envelope.js';
 
-export type { AttestationEnvelope } from './contracts/attestation-envelope.js';
+export type {
+  AttestationEnvelope,
+  AuditChainWriteOptions,
+  ToAuditChainOptions,
+} from './contracts/attestation-envelope.js';
 
 export {
   CcTaskStatusSchema,
