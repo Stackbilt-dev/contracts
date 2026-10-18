@@ -10,25 +10,42 @@ const result = (quota: unknown) => ({
     metadata: { session: { tier: 'free', scopes: ['generate', 'read'], ttlSeconds: 3600, quota } },
   },
 });
+const session = (quota: unknown) => ({ tier: 'free', scopes: [], ttlSeconds: 60, quota });
+const parses = (quota: unknown) => InitializeSessionMetadataSchema.safeParse(session(quota)).success;
 
 describe('InitializeSessionMetadataSchema quota', () => {
-  it('accepts the gateway hint shape { scaffolds, note } (stackbilt-mcp-gateway#99)', () => {
+  it('parses the { scaffolds, note } shape from stackbilt-mcp-gateway#100 and keeps its values', () => {
     const parsed = InitializeResultSchema.parse(result({ scaffolds: 3, note: '3 scaffolds units/mo by default.' }));
     expect(parsed.serverInfo.metadata?.session?.quota).toEqual({ scaffolds: 3, note: '3 scaffolds units/mo by default.' });
   });
 
-  it('accepts unlimited (-1) scaffolds', () => {
-    expect(InitializeResultSchema.safeParse(result({ scaffolds: -1, note: 'Unlimited.' })).success).toBe(true);
+  it('parses the legacy { credits, note } shape and keeps credits', () => {
+    const parsed = InitializeResultSchema.parse(result({ credits: 25, note: '25 credits/mo.' }));
+    expect(parsed.serverInfo.metadata?.session?.quota).toEqual({ credits: 25, note: '25 credits/mo.' });
   });
 
-  it('still accepts the legacy { credits, note } shape', () => {
-    expect(InitializeResultSchema.safeParse(result({ credits: 25, note: '25 credits/mo.' })).success).toBe(true);
+  it('accepts -1 as the unlimited sentinel', () => {
+    expect(parses({ scaffolds: -1, note: 'Unlimited.' })).toBe(true);
   });
 
-  it('still requires note, and rejects non-numeric counts', () => {
-    const session = { tier: 'free', scopes: [], ttlSeconds: 60 };
-    expect(InitializeSessionMetadataSchema.safeParse({ ...session, quota: { scaffolds: 3 } }).success).toBe(false);
-    expect(InitializeSessionMetadataSchema.safeParse({ ...session, quota: { scaffolds: '3', note: 'x' } }).success).toBe(false);
+  it('rejects a quota with neither count', () => {
+    expect(parses({ note: 'x' })).toBe(false);
+  });
+
+  it('rejects a missing note', () => {
+    expect(parses({ scaffolds: 3 })).toBe(false);
+  });
+
+  it('rejects a non-numeric count', () => {
+    expect(parses({ scaffolds: '3', note: 'x' })).toBe(false);
+  });
+
+  it('rejects non-integer counts', () => {
+    expect(parses({ scaffolds: 2.5, note: 'x' })).toBe(false);
+  });
+
+  it('rejects counts below the -1 sentinel', () => {
+    expect(parses({ credits: -7, note: 'x' })).toBe(false);
   });
 
   it('quota stays optional', () => {
