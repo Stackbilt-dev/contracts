@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.0 - 2026-10-18
+
+### Changed
+
+- **`InitializeSessionMetadataSchema.quota`** also accepts `{ scaffolds, note }` (default monthly `scaffolds` units, `-1` = unlimited), the hint shape stackbilt-mcp-gateway#100 (pending) will send in place of today's `{ credits, note }`. `credits` becomes optional and `scaffolds` is added; at least one must be present, and both must be integers ≥ -1. Without this, a client validating `initialize` against this schema would reject the new gateway's result. No current consumer does: tarotscript's `McpClient` keeps its own loose types and doesn't read `quota`. Type note (breaking under `strictNullChecks`, hence the minor bump on 0.x): `quota.credits` is now `number | undefined`.
+
 ## 0.13.0 - 2026-07-04
 
 ### New Exports

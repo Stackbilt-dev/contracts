@@ -87,7 +87,20 @@ export const InitializeSessionMetadataSchema = z.object({
   tier: z.string(),
   scopes: z.array(z.string()),
   ttlSeconds: z.number().int().positive(),
-  quota: z.object({ credits: z.number(), note: z.string() }).optional(),
+  /** Informational quota hint. The gateway currently sends `{ credits, note }`;
+   * stackbilt-mcp-gateway#100 (pending) changes it to `{ scaffolds, note }`
+   * (default monthly `scaffolds` units, -1 = unlimited). Either count parses;
+   * at least one must be present. */
+  quota: z
+    .object({
+      scaffolds: z.number().int().min(-1).optional(),
+      credits: z.number().int().min(-1).optional(),
+      note: z.string(),
+    })
+    .refine((q) => q.scaffolds !== undefined || q.credits !== undefined, {
+      message: 'quota needs scaffolds or credits',
+    })
+    .optional(),
 });
 
 export const InitializeResultSchema = z.object({
